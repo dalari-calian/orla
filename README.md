@@ -1,0 +1,57 @@
+# Orla
+
+Controle financeiro pessoal + carteira de investimentos. Web, mobile-first.
+A especificação completa está em [`docs/`](docs/00-INDICE.md).
+
+## Rodando na sua máquina
+
+Pré-requisitos: Node 22+, pnpm 9+, Git e Docker Desktop **aberto**. Para conferir:
+
+```bash
+node scripts/doctor.mjs
+```
+
+Primeira vez:
+
+```bash
+pnpm install                         # dependências
+cp .env.example .env                 # PowerShell: Copy-Item .env.example .env
+pnpm db:up                           # sobe o Postgres (Docker, porta 5433)
+pnpm db:migrate                      # cria as tabelas
+pnpm db:seed                         # usuário de exemplo: demo / orla1234
+pnpm dev                             # web + API
+```
+
+Abra **http://localhost:5173**. A API responde em http://localhost:3333/api/v1/health
+(e também pelo front, em http://localhost:5173/api/v1/health).
+
+No dia a dia, basta abrir o Docker Desktop e rodar `pnpm db:up` e depois `pnpm dev`.
+
+## Comandos
+
+| Comando               | O que faz                                             |
+| --------------------- | ----------------------------------------------------- |
+| `pnpm dev`            | Sobe web (5173) e API (3333) com recarga automática   |
+| `pnpm test`           | Testes (Vitest) de todos os pacotes                   |
+| `pnpm lint`           | ESLint                                                |
+| `pnpm typecheck`      | TypeScript em todos os pacotes                        |
+| `pnpm build`          | Build de produção do front                            |
+| `pnpm format`         | Formata o código com Prettier                         |
+| `pnpm doctor`         | Verifica o ambiente                                   |
+| `pnpm db:up`          | Sobe o Postgres local                                 |
+| `pnpm db:down`        | Para o Postgres (os dados continuam no volume Docker) |
+| `pnpm db:migrate`     | Aplica as migrations                                  |
+| `pnpm db:migrate:dev` | Cria uma migration nova a partir do `schema.prisma`   |
+| `pnpm db:seed`        | Dados de exemplo                                      |
+| `pnpm db:studio`      | Prisma Studio (ver/editar dados no navegador)         |
+
+## Estrutura
+
+```
+apps/web            React 19 + Vite + Tailwind v4 (front)
+apps/api            Express 5 (API em /api/v1)
+packages/core       Regras de negócio puras + testes (dinheiro, datas, cálculos)
+packages/contracts  Schemas Zod compartilhados entre web e API
+packages/db         Prisma (schema, migrations, seed)
+packages/config     tsconfig e ESLint compartilhados
+```

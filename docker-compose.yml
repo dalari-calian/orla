@@ -1,0 +1,26 @@
+# Postgres local do Orla. A porta do host vem de POSTGRES_PORT no .env (padrão 5433,
+# para não conflitar com outro Postgres que já esteja usando a 5432).
+name: orla
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: orla-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orla
+      POSTGRES_PASSWORD: orla
+      POSTGRES_DB: orla
+      TZ: America/Sao_Paulo
+    ports:
+      - '${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - orla-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U orla -d orla']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  orla-pgdata:

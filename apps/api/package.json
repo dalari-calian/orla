@@ -1,0 +1,29 @@
+{
+  "name": "@orla/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@orla/contracts": "workspace:*",
+    "@orla/core": "workspace:*",
+    "@orla/db": "workspace:*",
+    "express": "5.3.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@orla/config": "workspace:*",
+    "@types/express": "5.0.6",
+    "@types/node": "catalog:",
+    "@types/supertest": "7.2.1",
+    "supertest": "7.3.1",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

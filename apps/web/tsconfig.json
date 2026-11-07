@@ -1,0 +1,9 @@
+{
+  "extends": "@orla/config/tsconfig.react.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

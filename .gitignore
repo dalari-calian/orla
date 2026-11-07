@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+packages/db/src/generated/
+.vercel/
+.DS_Store
+Thumbs.db
+*.log
+
+# Dados pessoais (planilhas reais do dono) — ficam só na máquina local.
+docs/referencias/planilhas/
+docs/referencias/**/*.xlsx
+docs/referencias/**/*.xls
+docs/referencias/**/*.csv

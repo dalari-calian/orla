@@ -1,0 +1,10 @@
+pnpm-lock.yaml
+docs/referencias/
+packages/db/src/generated/
+packages/db/prisma/migrations/
+coverage/
+dist/
+
+# Especificação escrita à mão — não reformatar.
+docs/
+CLAUDE.md

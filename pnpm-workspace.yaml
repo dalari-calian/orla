@@ -1,0 +1,22 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Dependências que podem rodar script de instalação (o pnpm bloqueia por padrão).
+allowBuilds:
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+
+# Versões centralizadas: os package.json usam "catalog:".
+catalog:
+  typescript: 6.0.3
+  vitest: 5.1.0
+  '@vitest/coverage-v8': 5.1.0
+  '@types/node': 26.6.6
+  decimal.js: 10.6.0
+  zod: 4.6.7
+  tsx: 4.23.15
+  prisma: 7.10.1
+  '@prisma/client': 7.10.1
+  '@prisma/adapter-pg': 7.10.1
