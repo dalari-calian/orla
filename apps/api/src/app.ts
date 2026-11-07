@@ -1,12 +1,48 @@
+import type { SignupMode } from '@orla/contracts'
+import type { PrismaClient } from '@orla/db'
 import express, { type Express } from 'express'
+import { RateLimiter } from './lib/rate-limit.ts'
+import { requireAuth } from './middleware/auth.ts'
 import { errorHandler, notFoundHandler } from './middleware/error-handler.ts'
+import { originCheck } from './middleware/origin-check.ts'
 import { securityHeaders } from './middleware/security-headers.ts'
-import { healthRouter, type HealthDeps } from './routes/health.ts'
+import { accountsRouter } from './routes/accounts.ts'
+import { authRouter } from './routes/auth.ts'
+import { categoriesRouter } from './routes/categories.ts'
+import { creditCardsRouter } from './routes/credit-cards.ts'
+import { healthRouter } from './routes/health.ts'
+import { payeesRouter } from './routes/payees.ts'
+import { recurringTemplatesRouter } from './routes/recurring-templates.ts'
+import { settingsRouter } from './routes/settings.ts'
+import { AuthService } from './services/auth.ts'
 
-export type AppDeps = HealthDeps
+export interface AppDeps {
+  prisma: PrismaClient
+  version: string
+  timezone: string
+  /** Deve lançar erro se o banco não responder (usado pelo /health). */
+  checkDatabase: () => Promise<void>
+  appOrigin: string
+  /** Cookies `Secure` (true fora do ambiente local). */
+  secureCookies: boolean
+  jwtSecret: string
+  refreshPepper: string
+  signupMode: SignupMode
+  inviteCode: string | undefined
+  /** Tentativas por minuto (RNF-22). Padrão: 5 de login por IP+usuário e 5 cadastros por IP. */
+  rateLimits?: { loginPerMinute?: number; signupPerMinute?: number }
+}
 
-/** Monta o app Express. Dependências injetadas para facilitar testes (sem banco). */
+/** Monta o app Express. Dependências injetadas para facilitar testes. */
 export function createApp(deps: AppDeps): Express {
+  const { prisma } = deps
+  const auth = new AuthService(prisma, {
+    jwtSecret: deps.jwtSecret,
+    refreshPepper: deps.refreshPepper,
+    signupMode: deps.signupMode,
+    inviteCode: deps.inviteCode,
+  })
+
   const app = express()
   app.disable('x-powered-by')
   app.set('trust proxy', 1)
@@ -14,9 +50,30 @@ export function createApp(deps: AppDeps): Express {
   app.use(express.json({ limit: '1mb' }))
 
   const v1 = express.Router()
+  v1.use(originCheck(deps.appOrigin))
   v1.use(healthRouter(deps))
-  app.use('/api/v1', v1)
+  v1.use(
+    authRouter({
+      prisma,
+      auth,
+      secureCookies: deps.secureCookies,
+      loginLimiter: new RateLimiter(deps.rateLimits?.loginPerMinute ?? 5, 60_000),
+      signupLimiter: new RateLimiter(deps.rateLimits?.signupPerMinute ?? 5, 60_000),
+    }),
+  )
 
+  // Daqui para baixo, tudo exige sessão e é filtrado pelo usuário dela.
+  const authed = express.Router()
+  authed.use(requireAuth(auth))
+  authed.use(settingsRouter(prisma))
+  authed.use(accountsRouter(prisma))
+  authed.use(creditCardsRouter(prisma))
+  authed.use(categoriesRouter(prisma))
+  authed.use(payeesRouter(prisma))
+  authed.use(recurringTemplatesRouter(prisma))
+  v1.use(authed)
+
+  app.use('/api/v1', v1)
   app.use('/api', notFoundHandler)
   app.use(errorHandler)
   return app

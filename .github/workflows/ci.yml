@@ -12,9 +12,25 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # RNF-42: os testes da API rodam contra um Postgres real.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: orla
+          POSTGRES_PASSWORD: orla
+          POSTGRES_DB: orla
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U orla -d orla"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
     env:
-      # `prisma generate` não conecta no banco; os testes da Fase 0 não usam Postgres.
       DATABASE_URL: postgresql://orla:orla@localhost:5432/orla
+      # O setup dos testes cria este banco e aplica as migrations nele.
+      DATABASE_URL_TEST: postgresql://orla:orla@localhost:5432/orla_test
     steps:
       - uses: actions/checkout@v4
 

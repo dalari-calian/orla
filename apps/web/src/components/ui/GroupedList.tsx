@@ -36,9 +36,26 @@ interface ListRowProps {
   /** Cor do círculo do ícone (token CSS, ex.: var(--chart-2)). */
   iconColor?: string
   to?: string
+  /** Linha clicável que não navega (ex.: abre o sheet de edição). */
+  onClick?: () => void
+  /** Recuo para subitens (ex.: subcategorias). */
+  indent?: boolean
+  /** Linha esmaecida (ex.: conta arquivada). */
+  muted?: boolean
 }
 
-export function ListRow({ title, subtitle, value, icon: Icon, iconColor, to }: ListRowProps) {
+export function ListRow({
+  title,
+  subtitle,
+  value,
+  icon: Icon,
+  iconColor,
+  to,
+  onClick,
+  indent,
+  muted,
+}: ListRowProps) {
+  const interactive = Boolean(to || onClick)
   const content = (
     <>
       {Icon && (
@@ -58,13 +75,15 @@ export function ListRow({ title, subtitle, value, icon: Icon, iconColor, to }: L
         {subtitle && <span className="block truncate text-footnote text-text-2">{subtitle}</span>}
       </span>
       {value && <span className="shrink-0 text-subhead text-text-2 tabular">{value}</span>}
-      {to && <ChevronRight className="size-4 shrink-0 text-text-3" aria-hidden />}
+      {interactive && <ChevronRight className="size-4 shrink-0 text-text-3" aria-hidden />}
     </>
   )
 
   const rowClass = cn(
-    'flex min-h-14 items-center gap-3 px-4 py-2.5',
-    to && 'transition-colors hover:bg-surface-2 active:bg-surface-2',
+    'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left',
+    indent && 'pl-10',
+    muted && 'opacity-55',
+    interactive && 'transition-colors hover:bg-surface-2 active:bg-surface-2',
   )
 
   return (
@@ -73,6 +92,10 @@ export function ListRow({ title, subtitle, value, icon: Icon, iconColor, to }: L
         <Link to={to} className={rowClass}>
           {content}
         </Link>
+      ) : onClick ? (
+        <button type="button" onClick={onClick} className={rowClass}>
+          {content}
+        </button>
       ) : (
         <div className={rowClass}>{content}</div>
       )}

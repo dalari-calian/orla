@@ -1,6 +1,8 @@
 // Schema do Orla — convenções em docs/03-modelo-de-dados.md:
 // tabelas/colunas em snake_case (@@map/@map), models em PascalCase,
-// IDs uuid v7 gerados na aplicação, dinheiro em centavos (BigInt).
+// IDs uuid v7 gerados na aplicação, dinheiro em centavos (BigInt),
+// enums como text + CHECK (as constraints CHECK e os índices parciais ficam no SQL
+// da migration, porque o Prisma não os expressa).
 
 generator client {
   provider     = "prisma-client"
@@ -12,6 +14,8 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Usuários e sessão ──────────────────────────────────────────────────────
+
 model User {
   id           String    @id @default(uuid(7)) @db.Uuid
   /// Único, sempre em minúsculas (case-insensitive na prática).
@@ -21,7 +25,13 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(3)
 
-  sessions Session[]
+  sessions           Session[]
+  settings           UserSettings?
+  accounts           Account[]
+  creditCards        CreditCard[]
+  categories         Category[]
+  payees             Payee[]
+  recurringTemplates RecurringTemplate[]
 
   @@map("users")
 }
@@ -40,4 +50,157 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+/// Preferências do usuário (docs/03 › user_settings). Uma linha por usuário.
+model UserSettings {
+  userId                   String    @id @map("user_id") @db.Uuid
+  /// Meta padrão de investimento: valor fixo OU % das receitas (só um dos dois).
+  defaultSavingsGoalCents  BigInt?   @map("default_savings_goal_cents")
+  defaultSavingsGoalPct    Decimal?  @map("default_savings_goal_pct") @db.Decimal(7, 4)
+  /// due_month · closing_month
+  cardCompetence           String    @default("due_month") @map("card_competence")
+  /// end · start · dietz
+  contributionTiming       String    @default("end") @map("contribution_timing")
+  /// contributions · trades
+  returnContributionSource String    @default("contributions") @map("return_contribution_source")
+  currency                 String    @default("BRL")
+  /// light · dark · system
+  theme                    String    @default("system")
+  hideValues               Boolean   @default(false) @map("hide_values")
+  onboardingCompletedAt    DateTime? @map("onboarding_completed_at") @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// ─── Cadastros (Fase 1) ─────────────────────────────────────────────────────
+
+/// Instituições/contas: bancos, corretoras, carteira de dinheiro.
+model Account {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  name       String
+  /// checking · savings · brokerage · wallet · other
+  kind       String
+  color      String
+  isArchived Boolean   @default(false) @map("is_archived")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditCards        CreditCard[]
+  recurringTemplates RecurringTemplate[]
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model CreditCard {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  /// Banco emissor.
+  accountId  String    @map("account_id") @db.Uuid
+  name       String
+  closingDay Int       @map("closing_day") @db.SmallInt
+  dueDay     Int       @map("due_day") @db.SmallInt
+  limitCents BigInt?   @map("limit_cents")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account            Account             @relation(fields: [accountId], references: [id])
+  recurringTemplates RecurringTemplate[]
+
+  @@index([userId])
+  @@map("credit_cards")
+}
+
+/// Categorias de receita/despesa, hierárquicas com 1 nível de subcategoria.
+model Category {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  /// income · expense
+  kind               String
+  name               String
+  parentId           String?   @map("parent_id") @db.Uuid
+  /// Nome do ícone (lucide).
+  icon               String
+  color              String
+  monthlyBudgetCents BigInt?   @map("monthly_budget_cents")
+  sortOrder          Int       @default(0) @map("sort_order")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent             Category?           @relation("CategoryTree", fields: [parentId], references: [id])
+  children           Category[]          @relation("CategoryTree")
+  defaultForPayees   Payee[]
+  recurringTemplates RecurringTemplate[]
+
+  @@index([userId, kind])
+  @@map("categories")
+}
+
+/// Estabelecimentos / quem pagou / quem recebeu.
+model Payee {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  name              String
+  defaultCategoryId String?   @map("default_category_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultCategory    Category?           @relation(fields: [defaultCategoryId], references: [id])
+  recurringTemplates RecurringTemplate[]
+
+  // Nome único por usuário, sem diferenciar maiúsculas: índice parcial em lower(name) no SQL.
+  @@index([userId])
+  @@map("payees")
+}
+
+/// Modelos que projetam lançamentos nos meses (salário base, contas fixas).
+/// Na Fase 1 só são criados pelo onboarding (salário base); a materialização é da Fase 2.
+model RecurringTemplate {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  /// income · expense
+  type          String
+  /// fixed · planned
+  nature        String
+  description   String
+  amountCents   BigInt    @map("amount_cents")
+  categoryId    String?   @map("category_id") @db.Uuid
+  accountId     String?   @map("account_id") @db.Uuid
+  payeeId       String?   @map("payee_id") @db.Uuid
+  /// pix · debit · credit · cash · boleto · transfer · other
+  paymentMethod String?   @map("payment_method")
+  creditCardId  String?   @map("credit_card_id") @db.Uuid
+  /// monthly · yearly
+  frequency     String
+  monthOfYear   Int?      @map("month_of_year") @db.SmallInt
+  dayOfMonth    Int       @map("day_of_month") @db.SmallInt
+  startMonth    DateTime  @map("start_month") @db.Date
+  endMonth      DateTime? @map("end_month") @db.Date
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category?   @relation(fields: [categoryId], references: [id])
+  account    Account?    @relation(fields: [accountId], references: [id])
+  payee      Payee?      @relation(fields: [payeeId], references: [id])
+  creditCard CreditCard? @relation(fields: [creditCardId], references: [id])
+
+  @@index([userId])
+  @@map("recurring_templates")
 }

@@ -6,11 +6,19 @@ const env = loadEnv()
 const prisma = createPrismaClient(env.DATABASE_URL)
 
 const app = createApp({
+  prisma,
   version: process.env.npm_package_version ?? '0.0.0',
   timezone: env.APP_TIMEZONE,
   checkDatabase: async () => {
     await prisma.$queryRaw`SELECT 1`
   },
+  appOrigin: env.APP_ORIGIN,
+  // Em localhost os navegadores aceitam cookie Secure, mas o Vite/HTTP local simplifica sem ele.
+  secureCookies: env.NODE_ENV === 'production',
+  jwtSecret: env.JWT_SECRET,
+  refreshPepper: env.REFRESH_TOKEN_PEPPER,
+  signupMode: env.SIGNUP_MODE,
+  inviteCode: env.SIGNUP_INVITE_CODE,
 })
 
 const server = app.listen(env.API_PORT, () => {

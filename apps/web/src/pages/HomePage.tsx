@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { SystemStatus } from '@/components/SystemStatus'
 import { Card } from '@/components/ui/Card'
 import { GroupedList, ListRow } from '@/components/ui/GroupedList'
+import { useMe } from '@/features/auth/api'
 import { formatMonthYear } from '@/lib/dates'
 
 const roadmap = [
@@ -18,7 +19,7 @@ const roadmap = [
   { phase: 8, title: 'Notícias e polimento', detail: 'Notícias, ocultar valores, E2E' },
 ]
 
-const CURRENT_PHASE = 0
+const CURRENT_PHASE = 1
 
 function HeroAmount({ cents }: { cents: number }) {
   const parts = formatBRLParts(cents)
@@ -33,11 +34,13 @@ function HeroAmount({ cents }: { cents: number }) {
 }
 
 export function HomePage() {
+  const me = useMe()
+  const firstName = (me.data?.displayName || me.data?.username || '').split(' ')[0]
   return (
     <>
       <PageHeader
         title="Início"
-        subtitle={`Olá! Este é o seu mês de ${formatMonthYear(new Date())}.`}
+        subtitle={`Olá, ${firstName}! Este é o seu mês de ${formatMonthYear(new Date())}.`}
       />
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">

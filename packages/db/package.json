@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@orla/config": "workspace:*",
+    "@orla/core": "workspace:*",
     "@types/node": "catalog:",
     "bcryptjs": "3.0.3",
     "prisma": "catalog:",

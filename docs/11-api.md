@@ -25,6 +25,22 @@ Erro inesperado em qualquer rota → `500 { error: { code: 'INTERNAL', message }
 
 `POST /auth/register` (username, senha, código de convite) · `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me`
 
+Implementado na Fase 1 (schemas em `packages/contracts/src/auth.ts`):
+
+| método | rota | sessão | notas |
+| --- | --- | --- | --- |
+| GET | `/auth/config` | pública | `{ signupMode: 'invite' \| 'open' \| 'closed' }` — a tela de cadastro decide se pede convite |
+| POST | `/auth/register` | pública | `{ username, password, displayName?, inviteCode? }` → `201` + `MeResponse` e cookies. Cria `user_settings` e as categorias padrão (RF-60). `403` convite inválido/cadastro fechado · `409` usuário já existe · rate limit 5/min por IP |
+| POST | `/auth/login` | pública | `{ username, password }` → `MeResponse` e cookies. `401` com mensagem única para usuário inexistente ou senha errada · `429` após 5 tentativas/min por IP+usuário |
+| POST | `/auth/refresh` | cookie `orla_rt` | Rotaciona o refresh token. Reuso de um token já rotacionado (fora de uma janela de 10 s) revoga **todas** as sessões do usuário. Falha → `401` e limpa os cookies |
+| POST | `/auth/logout` | — | Revoga o refresh token, limpa os cookies, `204` |
+| GET/PATCH | `/auth/me` | sim | `MeResponse = { id, username, displayName, onboardingCompleted }`; `PATCH { displayName }` |
+
+- Cookies `httpOnly; SameSite=Lax` (`Secure` em produção): `orla_at` = JWT HS256 de 15 min (path `/`), `orla_rt` = refresh opaco de 30 dias (path `/api/v1/auth`, guardado só como HMAC-SHA256 com `REFRESH_TOKEN_PEPPER`).
+- Também aceita `Authorization: Bearer <access token>` (app nativo/bot).
+- Toda rota de dados exige sessão; sem sessão → `401`, inclusive para rotas inexistentes (não revela o que existe).
+- Escritas com header `Origin` diferente de `APP_ORIGIN` → `403` (CSRF, RNF-20).
+
 ### Configuração
 
 | método    | rota                                                      |                                                     |
@@ -33,6 +49,17 @@ Erro inesperado em qualquer rota → `500 { error: { code: 'INTERNAL', message }
 | CRUD      | `/accounts` · `/credit-cards` · `/categories` · `/payees` |                                                     |
 | CRUD      | `/recurring-templates`                                    | `PATCH` aceita `applyFromMonth`                     |
 | CRUD      | `/asset-classes` · `/target-allocations` (PUT em lote)    |                                                     |
+
+Implementado na Fase 1 (schemas em `packages/contracts/src/registrations.ts` e `settings.ts`):
+
+- **CRUD** = `GET /x` (lista `{ data, nextCursor: null }`) · `GET /x/:id` · `POST /x` (`201`) · `PATCH /x/:id` · `DELETE /x/:id` (soft delete, `204`) · `POST /x/:id/restore`.
+- Registro de outro usuário, excluído ou com ID malformado → `404`. Referência a registro de outro usuário (ex.: `accountId` do cartão) → `400 VALIDATION` com `details.fields`.
+- `/accounts`: `{ name, kind: checking|savings|brokerage|wallet|other, color }`; `PATCH` aceita `isArchived`. Nome único por usuário sem diferenciar maiúsculas (`409`). Não exclui conta com cartão ativo (`409`).
+- `/credit-cards`: `{ accountId, name, closingDay 1–31, dueDay 1–31, limitCents? }`.
+- `/categories`: `{ kind, name, parentId?, icon (catálogo do core), color, monthlyBudgetCents? }`; `GET ?kind=income|expense`. Só 1 nível de subcategoria, pai do mesmo tipo; `kind` não muda depois de criada. Nome único dentro do mesmo pai. Não exclui categoria com subcategorias (`409`); restore exige o pai ativo.
+- `/payees`: `{ name, defaultCategoryId? }`; `GET ?q=` busca por nome. Nome único sem diferenciar maiúsculas.
+- `/me/settings`: `GET` e `PATCH { savingsGoal?, cardCompetence?, theme?, hideValues?, onboardingCompleted? }`, com `savingsGoal = { mode: 'none' } | { mode: 'fixed', amountCents } | { mode: 'percent', percent: "20.5" }`.
+- `/recurring-templates` (subconjunto da Fase 1): `GET` e `POST { description, amountCents, dayOfMonth, startMonth: 'YYYY-MM', categoryId?, accountId? }`, que cria **receita fixa mensal** (salário base do onboarding). Editar, excluir e materializar nos meses vêm na Fase 2.
 
 ### Finanças
 

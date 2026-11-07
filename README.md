@@ -22,7 +22,8 @@ pnpm db:seed                         # usuário de exemplo: demo / orla1234
 pnpm dev                             # web + API
 ```
 
-Abra **http://localhost:5173**. A API responde em http://localhost:3333/api/v1/health
+Abra **http://localhost:5173** e entre com `demo` / `orla1234`, ou crie uma conta usando o
+código de convite que está em `SIGNUP_INVITE_CODE` no `.env`. A API responde em http://localhost:3333/api/v1/health
 (e também pelo front, em http://localhost:5173/api/v1/health).
 
 No dia a dia, basta abrir o Docker Desktop e rodar `pnpm db:up` e depois `pnpm dev`.

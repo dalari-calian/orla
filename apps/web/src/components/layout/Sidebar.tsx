@@ -1,6 +1,7 @@
 import { Moon, Plus, Sun } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { cn } from '@/lib/cn'
+import { useMe } from '@/features/auth/api'
 import { useTheme } from '@/lib/theme'
 import { sections } from '@/routes/screens'
 import { Logo } from './Logo'
@@ -8,6 +9,7 @@ import { Logo } from './Logo'
 /** Navegação do desktop (≥1024px): logo, seções, botão de lançar e tema. */
 export function Sidebar({ onNewEntry }: { onNewEntry: () => void }) {
   const [theme, setTheme] = useTheme()
+  const me = useMe()
   const isDark =
     theme === 'dark' || (theme === 'system' && document.documentElement.dataset.theme === 'dark')
 
@@ -52,8 +54,12 @@ export function Sidebar({ onNewEntry }: { onNewEntry: () => void }) {
 
       <div className="flex items-center justify-between px-3 pt-4">
         <div className="min-w-0">
-          <p className="truncate text-subhead font-medium">Você</p>
-          <p className="text-caption text-text-2">Login chega na Fase 1</p>
+          <p className="truncate text-subhead font-medium">
+            {me.data?.displayName || me.data?.username}
+          </p>
+          <NavLink to="/config" className="text-caption text-text-2 hover:text-accent">
+            Perfil e ajustes
+          </NavLink>
         </div>
         <button
           type="button"
