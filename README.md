@@ -11,7 +11,11 @@ Pré-requisitos: Node 22+, pnpm 9+, Git e Docker Desktop **aberto**. Para confer
 node scripts/doctor.mjs
 ```
 
-Primeira vez:
+**Atalho:** com o Docker Desktop aberto, `pnpm start` faz tudo de uma vez (cria o `.env` se faltar,
+instala, sobe o banco, aplica migrations, roda o seed e sobe web + API). Serve para a primeira vez e
+para o dia a dia.
+
+Passo a passo, se preferir:
 
 ```bash
 pnpm install                         # dependências
@@ -26,25 +30,26 @@ Abra **http://localhost:5173** e entre com `demo` / `orla1234`, ou crie uma cont
 código de convite que está em `SIGNUP_INVITE_CODE` no `.env`. A API responde em http://localhost:3333/api/v1/health
 (e também pelo front, em http://localhost:5173/api/v1/health).
 
-No dia a dia, basta abrir o Docker Desktop e rodar `pnpm db:up` e depois `pnpm dev`.
+No dia a dia, basta abrir o Docker Desktop e rodar `pnpm start` (ou `pnpm db:up` e depois `pnpm dev`).
 
 ## Comandos
 
-| Comando               | O que faz                                             |
-| --------------------- | ----------------------------------------------------- |
-| `pnpm dev`            | Sobe web (5173) e API (3333) com recarga automática   |
-| `pnpm test`           | Testes (Vitest) de todos os pacotes                   |
-| `pnpm lint`           | ESLint                                                |
-| `pnpm typecheck`      | TypeScript em todos os pacotes                        |
-| `pnpm build`          | Build de produção do front                            |
-| `pnpm format`         | Formata o código com Prettier                         |
-| `pnpm doctor`         | Verifica o ambiente                                   |
-| `pnpm db:up`          | Sobe o Postgres local                                 |
-| `pnpm db:down`        | Para o Postgres (os dados continuam no volume Docker) |
-| `pnpm db:migrate`     | Aplica as migrations                                  |
-| `pnpm db:migrate:dev` | Cria uma migration nova a partir do `schema.prisma`   |
-| `pnpm db:seed`        | Dados de exemplo                                      |
-| `pnpm db:studio`      | Prisma Studio (ver/editar dados no navegador)         |
+| Comando               | O que faz                                              |
+| --------------------- | ------------------------------------------------------ |
+| `pnpm start`          | Prepara tudo (install, banco, migrations, seed) e sobe |
+| `pnpm dev`            | Sobe web (5173) e API (3333) com recarga automática    |
+| `pnpm test`           | Testes (Vitest) de todos os pacotes                    |
+| `pnpm lint`           | ESLint                                                 |
+| `pnpm typecheck`      | TypeScript em todos os pacotes                         |
+| `pnpm build`          | Build de produção do front                             |
+| `pnpm format`         | Formata o código com Prettier                          |
+| `pnpm doctor`         | Verifica o ambiente                                    |
+| `pnpm db:up`          | Sobe o Postgres local                                  |
+| `pnpm db:down`        | Para o Postgres (os dados continuam no volume Docker)  |
+| `pnpm db:migrate`     | Aplica as migrations                                   |
+| `pnpm db:migrate:dev` | Cria uma migration nova a partir do `schema.prisma`    |
+| `pnpm db:seed`        | Dados de exemplo                                       |
+| `pnpm db:studio`      | Prisma Studio (ver/editar dados no navegador)          |
 
 ## Estrutura
 

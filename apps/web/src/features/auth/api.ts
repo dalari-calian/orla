@@ -6,11 +6,23 @@ import {
   type RegisterRequest,
   type UpdateProfileRequest,
 } from '@orla/contracts'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ApiRequestError, api } from '@/lib/api'
 
 export const meQueryKey = ['me'] as const
+
+/**
+ * Troca de sessão (login, cadastro, logout, sessão expirada): descarta os dados do usuário
+ * anterior e grava o novo `me`. Não usa `queryClient.clear()`: ele remove a própria query `me`
+ * e os guards já montados ficam presos à query antiga, sem perceber a mudança (a tela não saía
+ * do login depois de entrar).
+ */
+export function switchSession(queryClient: QueryClient, me: MeResponse | null): void {
+  void queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] })
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] })
+  queryClient.setQueryData(meQueryKey, me)
+}
 
 /** Usuário logado; `null` quando não há sessão (401). */
 export function useMe() {
@@ -48,10 +60,7 @@ export function useLogin() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: LoginRequest) => api.post('/auth/login', meResponseSchema, input),
-    onSuccess: (me) => {
-      queryClient.clear()
-      queryClient.setQueryData(meQueryKey, me)
-    },
+    onSuccess: (me) => switchSession(queryClient, me),
   })
 }
 
@@ -59,10 +68,7 @@ export function useRegister() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: RegisterRequest) => api.post('/auth/register', meResponseSchema, input),
-    onSuccess: (me) => {
-      queryClient.clear()
-      queryClient.setQueryData(meQueryKey, me)
-    },
+    onSuccess: (me) => switchSession(queryClient, me),
   })
 }
 
@@ -70,11 +76,8 @@ export function useLogout() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api.post('/auth/logout', z.undefined()),
-    onSettled: () => {
-      // Limpa tudo do usuário anterior da memória.
-      queryClient.clear()
-      queryClient.setQueryData(meQueryKey, null)
-    },
+    // Limpa tudo do usuário anterior da memória.
+    onSettled: () => switchSession(queryClient, null),
   })
 }
 

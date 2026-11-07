@@ -3,7 +3,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router'
 import { ToastProvider } from '@/components/ui/Toast'
-import { meQueryKey } from '@/features/auth/api'
+import { switchSession } from '@/features/auth/api'
 import { ApiRequestError, setSessionExpiredHandler } from '@/lib/api'
 import { router } from '@/routes/router'
 import '@/styles/globals.css'
@@ -21,10 +21,7 @@ const queryClient = new QueryClient({
 })
 
 // Sessão expirou de vez: esquece o usuário e a guarda de rota leva para o login.
-setSessionExpiredHandler(() => {
-  queryClient.clear()
-  queryClient.setQueryData(meQueryKey, null)
-})
+setSessionExpiredHandler(() => switchSession(queryClient, null))
 
 const root = document.getElementById('root')
 if (!root) throw new Error('Elemento #root não encontrado')
