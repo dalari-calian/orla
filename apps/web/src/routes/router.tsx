@@ -51,6 +51,24 @@ const implemented: RouteObject[] = [
     lazy: async () => ({ Component: (await import('@/features/finances/GoalsPage')).GoalsPage }),
   },
   {
+    path: '/carteira',
+    lazy: async () => ({
+      Component: (await import('@/features/portfolio/PortfolioPage')).PortfolioPage,
+    }),
+  },
+  {
+    path: '/carteira/ativos/:id',
+    lazy: async () => ({
+      Component: (await import('@/features/portfolio/AssetDetailPage')).AssetDetailPage,
+    }),
+  },
+  {
+    path: '/carteira/proventos',
+    lazy: async () => ({
+      Component: (await import('@/features/portfolio/DividendsPage')).DividendsPage,
+    }),
+  },
+  {
     path: '/config/importar',
     lazy: async () => ({ Component: (await import('@/features/imports/ImportPage')).ImportPage }),
   },
@@ -165,7 +183,6 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <HomePage /> },
-          sectionRoute('carteira'),
           sectionRoute('aporte'),
           sectionRoute('balanco'),
           { path: '/mais', element: <MorePage /> },

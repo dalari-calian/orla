@@ -1,6 +1,7 @@
 import { createPrismaClient } from '@orla/db'
 import { createApp } from './app.ts'
 import { loadEnv } from './env.ts'
+import { BrapiProvider } from './services/quotes.ts'
 
 const env = loadEnv()
 const prisma = createPrismaClient(env.DATABASE_URL)
@@ -19,6 +20,9 @@ const app = createApp({
   refreshPepper: env.REFRESH_TOKEN_PEPPER,
   signupMode: env.SIGNUP_MODE,
   inviteCode: env.SIGNUP_INVITE_CODE,
+  quoteProvider: new BrapiProvider(env.BRAPI_TOKEN),
+  quotesMonthlyBudget: env.QUOTES_MONTHLY_BUDGET,
+  cronSecret: env.CRON_SECRET,
 })
 
 const server = app.listen(env.API_PORT, () => {

@@ -28,6 +28,7 @@ import { shortDate, shortMonthLabel } from '@/features/finances/labels'
 import { NewRecurringSheet } from '@/features/finances/NewRecurringSheet'
 import type { RecurringKind } from '@/features/finances/RecurringTemplatesPage'
 import { UpcomingList } from '@/features/finances/Upcoming'
+import { usePortfolio } from '@/features/portfolio/api'
 import { categories } from '@/features/registrations/api'
 import { errorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -189,6 +190,54 @@ function ListCard({
   )
 }
 
+/** 3. Patrimônio (Carteira): valor total e resultado, das cotações em cache. */
+function WealthCard() {
+  const query = usePortfolio()
+  return (
+    <Card>
+      <CardHeader
+        title="Patrimônio"
+        action={
+          <Link
+            to="/carteira"
+            className="flex min-h-11 items-center text-subhead font-medium text-accent"
+          >
+            Carteira
+          </Link>
+        }
+      />
+      {query.isPending ? (
+        <Skeleton className="h-16" />
+      ) : query.isError ? (
+        <ErrorState description={errorMessage(query.error)} onRetry={() => void query.refetch()} />
+      ) : query.data.positions.length === 0 ? (
+        <p className="text-subhead text-text-2">
+          Cadastre seus investimentos para ver o patrimônio aqui.
+        </p>
+      ) : (
+        <>
+          <p className="text-title-2 font-semibold tabular">
+            {formatBRL(query.data.totals.valueCents)}
+          </p>
+          <p
+            className={cn(
+              'text-footnote tabular',
+              query.data.totals.resultCents >= 0 ? 'text-positive' : 'text-negative',
+            )}
+          >
+            {query.data.totals.resultCents >= 0 ? '+' : '−'}
+            {formatBRL(Math.abs(query.data.totals.resultCents))} no total
+            <span className="text-text-2">
+              {' '}
+              · proventos 12m {formatBRL(query.data.totals.dividends12mCents)}
+            </span>
+          </p>
+        </>
+      )}
+    </Card>
+  )
+}
+
 /** 6. Parcelamentos: total para quitar tudo. */
 function InstallmentsCard() {
   const query = useInstallmentSummary()
@@ -316,6 +365,7 @@ export function HomePage() {
         >
           <UpcomingList limit={5} />
         </ListCard>
+        <WealthCard />
         <InstallmentsCard />
         <ListCard
           title="Últimos lançamentos"

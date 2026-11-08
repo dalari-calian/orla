@@ -11,9 +11,24 @@ import {
   positiveCentsSchema,
 } from './common.ts'
 import { isoDateSchema } from './finances.ts'
+import {
+  assetClassKindSchema,
+  decimalStringSchema,
+  dividendKindSchema,
+  percentSchema,
+  tradeKindSchema,
+} from './portfolio.ts'
 import { paymentMethodSchema } from './registrations.ts'
 
-export const importKindSchema = z.enum(['transactions', 'installments', 'monthly_sheet'])
+export const importKindSchema = z.enum([
+  'transactions',
+  'installments',
+  'monthly_sheet',
+  'assets',
+  'trades',
+  'dividends',
+  'portfolio_sheet',
+])
 export type ImportKind = z.infer<typeof importKindSchema>
 
 const refName = z.string().trim().min(1).max(80).nullable()
@@ -63,10 +78,71 @@ export const importMonthGoalDraftSchema = z.object({
   investedCents: nonNegativeCentsSchema,
 })
 
+// ─── Carteira (Fase 5) ───────────────────────────────────────────────────────
+
+/** Ativo pelo ticker (bolsa) ou pelo nome (renda fixa); a API resolve ou cria. */
+export const importAssetRefSchema = z.object({
+  ticker: z.string().trim().min(3).max(12).nullable(),
+  name: z.string().trim().min(1).max(80),
+  classKind: assetClassKindSchema.nullable(),
+  className: z.string().trim().max(40).nullable(),
+  accountName: refName,
+})
+export type ImportAssetRef = z.infer<typeof importAssetRefSchema>
+
+export const importClassTargetDraftSchema = z.object({
+  kind: z.literal('classTarget'),
+  classKind: assetClassKindSchema.nullable(),
+  className: z.string().trim().max(40).nullable(),
+  targetPct: percentSchema,
+})
+
+export const importAssetDraftSchema = importAssetRefSchema.extend({
+  kind: z.literal('asset'),
+  fixedIncome: z
+    .object({
+      indexer: z.string().trim().max(10).nullable(),
+      rate: z.string().trim().max(40).nullable(),
+      maturity: isoDateSchema.nullable(),
+    })
+    .nullable(),
+  targetWeightPct: percentSchema.nullable(),
+  maxWeightPct: percentSchema.nullable(),
+  manualPrice: decimalStringSchema.nullable(),
+  manualPriceAt: isoDateSchema.nullable(),
+  manualValueCents: nonNegativeCentsSchema.nullable(),
+  manualValueAt: isoDateSchema.nullable(),
+})
+
+export const importAssetTradeDraftSchema = z.object({
+  kind: z.literal('assetTrade'),
+  asset: importAssetRefSchema,
+  tradeKind: tradeKindSchema,
+  date: isoDateSchema,
+  quantity: decimalStringSchema,
+  unitPrice: decimalStringSchema,
+  feesCents: nonNegativeCentsSchema,
+  totalCents: nonNegativeCentsSchema.nullable(),
+  splitRatio: decimalStringSchema.nullable(),
+  notes: notes,
+})
+
+export const importDividendDraftSchema = z.object({
+  kind: z.literal('dividend'),
+  asset: importAssetRefSchema,
+  dividendKind: dividendKindSchema,
+  payDate: isoDateSchema,
+  amountCents: positiveCentsSchema,
+})
+
 export const importDraftSchema = z.discriminatedUnion('kind', [
   importTransactionDraftSchema,
   importInstallmentDraftSchema,
   importMonthGoalDraftSchema,
+  importClassTargetDraftSchema,
+  importAssetDraftSchema,
+  importAssetTradeDraftSchema,
+  importDividendDraftSchema,
 ])
 export type ImportDraftInput = z.infer<typeof importDraftSchema>
 
@@ -129,6 +205,9 @@ export const importJobSchema = z.object({
     transactions: z.number().int(),
     installmentPlans: z.number().int(),
     monthGoals: z.number().int(),
+    assets: z.number().int().default(0),
+    trades: z.number().int().default(0),
+    dividends: z.number().int().default(0),
     created: z.array(z.string()),
     skipped: z.number().int(),
   }),
@@ -174,16 +253,22 @@ export const backupSchema = z.object({
     installmentPlans: z.array(z.record(z.string(), z.unknown())),
     transactions: z.array(z.record(z.string(), z.unknown())),
     monthSettings: z.array(z.record(z.string(), z.unknown())),
+    // Carteira (Fase 5). Backups antigos não têm: vazio.
+    assetClasses: z.array(z.record(z.string(), z.unknown())).default([]),
+    targetAllocations: z.array(z.record(z.string(), z.unknown())).default([]),
+    assets: z.array(z.record(z.string(), z.unknown())).default([]),
+    assetTrades: z.array(z.record(z.string(), z.unknown())).default([]),
+    dividends: z.array(z.record(z.string(), z.unknown())).default([]),
   }),
 })
-export type Backup = z.infer<typeof backupSchema>
+export type Backup = z.input<typeof backupSchema>
 
 /** POST /restore — `merge` só acrescenta o que não existe; `replace` deixa igual ao backup. */
 export const restoreRequestSchema = z.object({
   mode: z.enum(['merge', 'replace']),
   backup: backupSchema,
 })
-export type RestoreRequest = z.infer<typeof restoreRequestSchema>
+export type RestoreRequest = z.input<typeof restoreRequestSchema>
 
 export const restoreResponseSchema = z.object({
   created: z.number().int(),

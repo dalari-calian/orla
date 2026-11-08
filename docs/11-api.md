@@ -134,6 +134,18 @@ Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras
 | GET    | `/quotes?tickers=`                     | do cache; atualiza vencidos em background      |
 | GET    | `/tickers/search?q=`                   | autocomplete via provedor                      |
 
+**Implementado na Fase 5:**
+
+- `GET /asset-classes` (cria as 5 classes padrão para quem não tem — RC-01) · `POST` · `PATCH /:id` · `DELETE /:id` (409 com ativos). `PUT /target-allocations { items: [{ assetClassId, targetPct, maxPct }] }` substitui todas as metas (soma 100 é aviso no front).
+- `GET /assets[?archived=true]` · `POST` (ticker validado na lista do provedor em cache, quando existe; renda fixa nasce `quote_mode=manual`; aceita `manualPrice`/`manualValueCents` para já nascer com o preço ou saldo de hoje) · `PATCH /:id` (inclui `manualPrice` e `manualValueCents`) · `DELETE /:id` (soft delete com operações e proventos) · `GET /:id` → `{ position, assetClass, quote, trades, dividends, dividendsTotalCents }`.
+- `/asset-trades` CRUD + `/:id/restore`. Quantidade e preço trafegam como **texto decimal** (`"10.5"`). Sem `totalCents`, o total é `round(qtd × preço) + taxas` (venda: − taxas). Qualquer escrita recalcula a posição: venda maior que a posição → 400. `kind=position_set` (ajuste de posição): `quantity` + `unitPrice` = PM; total = qtd × PM. No `PATCH`, campo ausente fica como está.
+- `/dividends` CRUD + `/:id/restore` · `POST /dividends/batch { payDate, items }` (RC-41) · `GET /dividends/summary` (12 meses por classe, total do ano, média, maior pagador).
+- `GET /portfolio` → totais, alocação × meta por classe, posições (PM, custo, valor, resultado, pesos, proventos 12m, YoC), alertas e status das cotações.
+- `POST /quotes/refresh` (botão Atualizar) · `GET /tickers/search?q=` · `GET /jobs/quotes` (cron, `Authorization: Bearer CRON_SECRET`).
+
+**Cache de cotações (custo do provedor):** `quotes_cache` por ticker, compartilhado entre usuários. No pregão (dias úteis, 10h–18h30 BRT) a cotação vale 30 min; fora dele, vale até o próximo pregão se foi buscada depois do último fechamento. Abrir a carteira devolve o cache na hora e atualiza só os vencidos em segundo plano (até 5 por requisição; o botão, até 15). Pedidos simultâneos do mesmo ticker viram uma chamada. Falha: guarda o último preço e espera 6 h. Orçamento mensal em `provider_usage` (`QUOTES_MONTHLY_BUDGET`, padrão 13 mil) — ao atingir, para. Lista de tickers do autocomplete: 1 chamada a cada 7 dias (`provider_cache`). Sem `BRAPI_TOKEN`, nada sai para a internet. No navegador, a carteira fica 5 min em cache e não recarrega ao voltar à aba.
+
+
 ### Aporte
 
 | método | rota                                    |                            |
@@ -165,6 +177,7 @@ Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras
 | GET    | `/exports/:entity?format=csv|json&from=&to=` | `transactions` ou `installment-plans`                                 |
 | GET    | `/backup` · POST `/restore`                   | JSON completo · restaurar (`merge` ou `replace`)                      |
 
+- Tipos (`kind`): `transactions`, `installments`, `monthly_sheet` (Fase 4) e `assets`, `trades`, `dividends`, `portfolio_sheet` (Fase 5). Rascunhos da carteira: `classTarget`, `asset`, `assetTrade`, `dividend` — o ativo vai como referência (`ticker` ou `name` + classe + corretora) e é criado no commit se não existir. No fim do commit a posição de cada ativo tocado é recalculada: venda maior que a posição → 400 e nada é gravado (RI-05).
 - O arquivo é lido **no navegador** (SheetJS para .xlsx/.xls; CSV pelo core, UTF-8 ou Latin-1). A API recebe **rascunhos** (`importDraftSchema` em `packages/contracts/src/imports.ts`): `transaction`, `installmentPlan` ou `monthGoal`, com contas, cartões, categorias e estabelecimentos **pelo nome**.
 - `POST /imports/:id/rows` devolve, por linha, `status` (`ok` · `warning` · `duplicate` · `error`), mensagens e o que será criado ("Conta: Ailos"). Nomes casam sem acento/maiúsculas; sem igualdade exata, vale um único cadastro que comece com o nome ("Nubank" → "Nubank Roxinho"). Cartão inexistente é erro (cartão precisa de fechamento/vencimento); categoria, conta e estabelecimento são criados no commit se `createMissing` (padrão).
 - Duplicado (RI-02): mesmo mês de competência + valor + descrição normalizada de um lançamento existente, ou mesma descrição de um lançamento gerado por modelo recorrente no mês; parcelamento com mesma descrição, nº de parcelas e total.

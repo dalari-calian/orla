@@ -36,6 +36,11 @@ model User {
   transactions       Transaction[]
   monthSettings      MonthSettings[]
   importJobs         ImportJob[]
+  assetClasses       AssetClass[]
+  targetAllocations  TargetAllocation[]
+  assets             Asset[]
+  assetTrades        AssetTrade[]
+  dividends          Dividend[]
 
   @@map("users")
 }
@@ -101,6 +106,7 @@ model Account {
   recurringTemplates RecurringTemplate[]
   installmentPlans   InstallmentPlan[]
   transactions       Transaction[]
+  assets             Asset[]
 
   @@index([userId])
   @@map("accounts")
@@ -374,4 +380,176 @@ model ImportRow {
 
   @@index([jobId])
   @@map("import_rows")
+}
+
+// ─── Carteira (docs/03 › Investimentos, docs/05) ─────────────────────────────
+
+/// Classe de ativo (RC-01/02): Renda Fixa/Reserva, FIIs, Ações, Exterior, Cripto.
+model AssetClass {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  name      String
+  /// fixed_income · reit · stock · etf · international · crypto · other
+  kind      String
+  color     String
+  sortOrder Int       @default(0) @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets           Asset[]
+  targetAllocation TargetAllocation?
+
+  @@index([userId])
+  @@map("asset_classes")
+}
+
+/// Meta de alocação por classe (soma 100%, validada no core como aviso).
+model TargetAllocation {
+  assetClassId String   @id @map("asset_class_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  targetPct    Decimal  @map("target_pct") @db.Decimal(7, 4)
+  /// Teto de alerta da classe (opcional).
+  maxPct       Decimal? @map("max_pct") @db.Decimal(7, 4)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetClass AssetClass @relation(fields: [assetClassId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("target_allocations")
+}
+
+/// Ativo (RC-10..13). Mesmo ticker em duas corretoras = dois ativos.
+model Asset {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  assetClassId     String    @map("asset_class_id") @db.Uuid
+  /// "ITSA4", "MXRF11" — null para renda fixa.
+  ticker           String?
+  name             String
+  /// Corretora/banco de custódia.
+  accountId        String?   @map("account_id") @db.Uuid
+  /// auto (cotação do provedor) · manual (valor informado)
+  quoteMode        String    @default("auto") @map("quote_mode")
+  /// { indexer, rate, maturity, liquidity } para renda fixa.
+  fixedIncomeInfo  Json?     @map("fixed_income_info")
+  targetWeightPct  Decimal?  @map("target_weight_pct") @db.Decimal(7, 4)
+  maxWeightPct     Decimal?  @map("max_weight_pct") @db.Decimal(7, 4)
+  /// Preço informado à mão (vale quando é mais recente que a cotação, RC-33).
+  manualPrice      Decimal?  @map("manual_price") @db.Decimal(20, 8)
+  manualPriceAt    DateTime? @map("manual_price_at") @db.Timestamptz(3)
+  /// Saldo informado (renda fixa) até existir o balanço mensal (Fase 7).
+  manualValueCents BigInt?   @map("manual_value_cents")
+  manualValueAt    DateTime? @map("manual_value_at") @db.Timestamptz(3)
+  isArchived       Boolean   @default(false) @map("is_archived")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetClass AssetClass   @relation(fields: [assetClassId], references: [id])
+  account    Account?     @relation(fields: [accountId], references: [id])
+  trades     AssetTrade[]
+  dividends  Dividend[]
+
+  @@index([userId])
+  @@index([ticker])
+  @@map("assets")
+}
+
+/// Operação (RC-20/21): compra, venda, bonificação, desdobramento, renda fixa.
+model AssetTrade {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  assetId            String    @map("asset_id") @db.Uuid
+  /// buy · sell · bonus · split · reverse_split · subscription · fixed_income_deposit · fixed_income_withdrawal
+  kind               String
+  tradeDate          DateTime  @map("trade_date") @db.Date
+  quantity           Decimal   @db.Decimal(20, 8)
+  unitPrice          Decimal   @map("unit_price") @db.Decimal(20, 8)
+  feesCents          BigInt    @default(0) @map("fees_cents")
+  totalCents         BigInt    @map("total_cents")
+  splitRatio         Decimal?  @map("split_ratio") @db.Decimal(20, 8)
+  /// Simulação de aporte efetivada (Fase 6).
+  contributionPlanId String?   @map("contribution_plan_id") @db.Uuid
+  notes              String?
+  /// manual · import
+  source             String    @default("manual")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@index([userId, tradeDate])
+  @@index([assetId])
+  @@map("asset_trades")
+}
+
+/// Provento (RC-40): dividendo, JCP, rendimento de FII, juros. Não é aporte (RC-42).
+model Dividend {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  assetId      String    @map("asset_id") @db.Uuid
+  /// dividend · jcp · income · interest · other
+  kind         String
+  payDate      DateTime  @map("pay_date") @db.Date
+  exDate       DateTime? @map("ex_date") @db.Date
+  /// Valor líquido recebido.
+  amountCents  BigInt    @map("amount_cents")
+  grossCents   BigInt?   @map("gross_cents")
+  quantityBase Decimal?  @map("quantity_base") @db.Decimal(20, 8)
+  perShare     Decimal?  @map("per_share") @db.Decimal(20, 8)
+  notes        String?
+  source       String    @default("manual")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@index([userId, payDate])
+  @@index([assetId])
+  @@map("dividends")
+}
+
+/// Cache global de cotações (RC-31): um registro por ticker.
+model QuoteCache {
+  ticker    String    @id
+  price     Decimal?  @db.Decimal(20, 8)
+  changePct Decimal?  @map("change_pct") @db.Decimal(12, 6)
+  name      String?
+  /// Momento da cotação no provedor.
+  quotedAt  DateTime? @map("quoted_at") @db.Timestamptz(3)
+  fetchedAt DateTime  @map("fetched_at") @db.Timestamptz(3)
+  source    String
+  /// Última falha (não tenta de novo antes do intervalo de espera).
+  errorAt   DateTime? @map("error_at") @db.Timestamptz(3)
+  error     String?
+
+  @@map("quotes_cache")
+}
+
+/// Cache genérico de respostas do provedor (ex.: lista de tickers), por chave.
+model ProviderCache {
+  key       String   @id
+  payload   Json
+  fetchedAt DateTime @map("fetched_at") @db.Timestamptz(3)
+
+  @@map("provider_cache")
+}
+
+/// Chamadas feitas ao provedor por mês (orçamento com parada, RC-32).
+model ProviderUsage {
+  provider  String
+  month     String
+  calls     Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([provider, month])
+  @@map("provider_usage")
 }

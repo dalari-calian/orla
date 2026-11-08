@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { DEFAULT_CATEGORIES } from '@orla/core'
+import { DEFAULT_ASSET_CLASSES, DEFAULT_CATEGORIES } from '@orla/core'
 import type { LoginRequest, MeResponse, RegisterRequest, SignupMode } from '@orla/contracts'
 import type { PrismaClient } from '@orla/db'
 import bcrypt from 'bcryptjs'
@@ -122,6 +122,14 @@ export class AuthService {
           name: category.name,
           icon: category.icon,
           color: category.color,
+          sortOrder: index,
+        })),
+      })
+      // RC-01: classes de ativo padrão.
+      await tx.assetClass.createMany({
+        data: DEFAULT_ASSET_CLASSES.map((item, index) => ({
+          userId: created.id,
+          ...item,
           sortOrder: index,
         })),
       })

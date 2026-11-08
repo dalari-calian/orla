@@ -58,7 +58,81 @@ export interface MonthGoalDraft {
   investedCents: Cents
 }
 
-export type ImportDraft = TransactionDraft | InstallmentPlanDraft | MonthGoalDraft
+/** Classe de ativo pelo tipo (do formato da planilha) ou pelo nome (dos templates). */
+export type AssetClassKindRef =
+  'fixed_income' | 'reit' | 'stock' | 'etf' | 'international' | 'crypto' | 'other'
+
+/** Referência a um ativo: pelo ticker (bolsa) ou pelo nome (renda fixa). */
+export interface AssetRef {
+  ticker: string | null
+  name: string
+  classKind: AssetClassKindRef | null
+  className: string | null
+  accountName: string | null
+}
+
+/** Meta de alocação de uma classe (ex.: cabeçalho "FIIS - 30%"). */
+export interface ClassTargetDraft {
+  kind: 'classTarget'
+  classKind: AssetClassKindRef | null
+  className: string | null
+  targetPct: string
+}
+
+/** Cadastro de ativo (template Ativos, ou o último balanço da planilha com preço/saldo). */
+export interface AssetDraft extends AssetRef {
+  kind: 'asset'
+  fixedIncome: { indexer: string | null; rate: string | null; maturity: IsoDate | null } | null
+  targetWeightPct: string | null
+  maxWeightPct: string | null
+  /** Preço visto no último balanço (vale até a próxima cotação). */
+  manualPrice: string | null
+  manualPriceAt: IsoDate | null
+  /** Saldo da renda fixa no último balanço. */
+  manualValueCents: Cents | null
+  manualValueAt: IsoDate | null
+}
+
+export type AssetTradeKindRef =
+  | 'buy'
+  | 'sell'
+  | 'bonus'
+  | 'split'
+  | 'reverse_split'
+  | 'subscription'
+  | 'fixed_income_deposit'
+  | 'fixed_income_withdrawal'
+  | 'position_set'
+
+export interface AssetTradeDraft {
+  kind: 'assetTrade'
+  asset: AssetRef
+  tradeKind: AssetTradeKindRef
+  date: IsoDate
+  quantity: string
+  unitPrice: string
+  feesCents: Cents
+  totalCents: Cents | null
+  splitRatio: string | null
+  notes: string | null
+}
+
+export interface DividendDraft {
+  kind: 'dividend'
+  asset: AssetRef
+  dividendKind: 'dividend' | 'jcp' | 'income' | 'interest' | 'other'
+  payDate: IsoDate
+  amountCents: Cents
+}
+
+export type ImportDraft =
+  | TransactionDraft
+  | InstallmentPlanDraft
+  | MonthGoalDraft
+  | ClassTargetDraft
+  | AssetDraft
+  | AssetTradeDraft
+  | DividendDraft
 
 /** Uma linha (ou grupo de linhas) do arquivo já interpretada, pronta para a pré-visualização. */
 export interface ParsedImportRow {

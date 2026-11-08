@@ -230,6 +230,8 @@ Snapshot mensal congelado (o "balanço mensal" da planilha).
 - balance: `id, user_id, reference_date (data do fechamento), competence_month (UNIQUE por user), total_cents (somatório congelado), contributions_cents (aportes do período, congelado), dividends_cents (proventos do período, congelado), notes, status (draft · closed)`
 - item: `id, balance_id, asset_id, asset_class_id (congelado), account_id (congelado), quantity, unit_price (preço observado no dia), value_cents, dy_pct null, pvp null, extra jsonb (outros indicadores)`
 
+> **Fase 5:** `assets` ganhou `manual_price`/`manual_price_at` (RC-33) e `manual_value_cents`/`manual_value_at` (saldo da renda fixa até o balanço). `target_allocations` tem PK `asset_class_id`. Tabelas globais `provider_cache` (respostas do provedor por chave, ex.: lista de tickers) e `provider_usage` (chamadas por provedor e mês, para o orçamento). `quotes_cache` guarda também `name`, `quoted_at`, `error_at`/`error` (última falha).
+
 ### `quotes_cache` (global)
 
 `ticker PK, price numeric, change_pct, fetched_at, source, payload jsonb`

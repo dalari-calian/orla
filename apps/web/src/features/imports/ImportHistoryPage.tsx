@@ -14,6 +14,10 @@ const kindLabel: Record<ImportJob['kind'], string> = {
   monthly_sheet: 'Planilha mensal',
   transactions: 'Lançamentos',
   installments: 'Parcelamentos',
+  portfolio_sheet: 'Planilha da carteira',
+  assets: 'Ativos',
+  trades: 'Operações',
+  dividends: 'Proventos',
 }
 
 const dateTime = new Intl.DateTimeFormat('pt-BR', {
@@ -29,6 +33,9 @@ function summary(job: ImportJob): string {
     job.stats.transactions > 0 && `${job.stats.transactions} lançamentos`,
     job.stats.installmentPlans > 0 && `${job.stats.installmentPlans} parcelamentos`,
     job.stats.monthGoals > 0 && `${job.stats.monthGoals} metas`,
+    job.stats.trades > 0 && `${job.stats.trades} operações`,
+    job.stats.dividends > 0 && `${job.stats.dividends} proventos`,
+    job.stats.assets > 0 && `${job.stats.assets} ativos`,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : 'Nada gravado'
 }

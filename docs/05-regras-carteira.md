@@ -89,6 +89,19 @@ Cabeçalho: ticker, nome, cotação, variação do dia, hora da cotação. Abas/
 8. Notícias da carteira.
 9. Alertas: ativo acima do teto de concentração; classe fora da meta; balanço do mês não feito.
 
+## Decisões (Fase 5)
+
+- **Quantidade e preço** em `numeric(20,8)`, trafegam como texto decimal; posição calculada no core (`computePosition`), nunca guardada.
+- **Desdobramento**: `split_ratio` = ações novas por antiga (1:10 → 10). **Grupamento**: antigas por nova (10:1 → 10).
+- **Renda fixa até o Balanço (Fase 7)**: o valor atual é o **saldo informado** no ativo (`manual_value_cents`); sem saldo, vale o custo (aplicado − resgatado).
+- **RC-33 preço à mão**: `manual_price` vale quando é **mais recente ou igual** à cotação; cotação estritamente mais nova volta a valer.
+- **RC-31/32 cache**: validade no pregão de 30 min; fora do pregão, até o próximo pregão (sem chamadas à noite/fim de semana); feriados não são tratados. Orçamento mensal com parada; falha espera 6 h. Ver docs/11 › Carteira.
+- **Classes padrão** criadas no cadastro e, para usuários antigos, na primeira leitura de `/asset-classes`.
+- **Ticker + corretora** é único (índice parcial); o mesmo ticker em outra corretora é outro ativo (RC-12).
+- **Ajuste de posição** (`position_set`, "informado à mão"): para quem não quer lançar o histórico. A partir da data, quantidade = a informada e custo = qtd × PM (renda fixa: custo = valor aplicado); o que veio antes fica no histórico mas deixa de contar para qtd/PM; o lucro realizado anterior fica. Quantidade 0 zera a posição. Entra pelo botão "Ajustar quantidade e PM" do ativo, pela "Posição atual" opcional no cadastro do ativo e pelo tipo `ajuste` no template de operações.
+- Classes de ativo: criar, renomear, trocar tipo/cor e excluir (sem ativos) em Configurações › Metas.
+- Excluir ativo: soft delete do ativo, operações e proventos. Arquivar: some da posição, histórico preservado (RC-13).
+
 ## Casos de teste obrigatórios
 
 - PM com 3 compras e taxas; venda parcial não altera PM; venda acima da posição falha.

@@ -15,7 +15,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE'
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface RequestOptions {
   body?: unknown
@@ -102,6 +102,8 @@ export const api = {
     apiRequest('GET', path, schema, { signal }),
   post: <T extends z.ZodType>(path: string, schema: T, body?: unknown) =>
     apiRequest('POST', path, schema, { body: body ?? {} }),
+  put: <T extends z.ZodType>(path: string, schema: T, body: unknown) =>
+    apiRequest('PUT', path, schema, { body }),
   patch: <T extends z.ZodType>(path: string, schema: T, body: unknown) =>
     apiRequest('PATCH', path, schema, { body }),
   delete: <T extends z.ZodType>(path: string, schema: T) => apiRequest('DELETE', path, schema),

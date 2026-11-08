@@ -10,6 +10,7 @@ import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useToast } from '@/components/ui/Toast'
+import { AllocationTargets } from '@/features/portfolio/AllocationTargets'
 import { useSettings, useUpdateSettings } from '@/features/registrations/api'
 import { errorMessage } from '@/lib/api'
 
@@ -114,10 +115,7 @@ export function GoalsPage() {
         ) : (
           <Skeleton className="h-64 rounded-card" />
         )}
-        <p className="px-4 text-footnote text-text-2">
-          Alocação ideal por classe (FIIs, Ações, Renda Fixa...) chega junto com a Carteira (Fase
-          5).
-        </p>
+        <AllocationTargets />
       </div>
     </>
   )

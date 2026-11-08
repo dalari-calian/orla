@@ -9,11 +9,14 @@ import {
 export interface Clock {
   today: () => IsoDate
   currentMonth: () => CompetenceMonth
+  /** Instante atual (para carimbos como "preço informado em"). */
+  now: () => Date
 }
 
 export function createClock(timezone: string, now: () => Date = () => new Date()): Clock {
   return {
     today: () => todayIsoDate(now(), timezone),
     currentMonth: () => currentCompetenceMonth(now(), timezone),
+    now,
   }
 }

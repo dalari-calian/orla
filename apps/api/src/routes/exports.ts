@@ -167,8 +167,53 @@ type ColumnType =
   | 'date'
   | 'dateOrNull'
   | 'strings'
+  | 'decimal'
   | 'decimalOrNull'
+  | 'jsonOrNull'
 const COLUMNS: Record<string, Record<string, ColumnType>> = {
+  assetClasses: { id: 'string', name: 'string', kind: 'string', color: 'string', sortOrder: 'int' },
+  assets: {
+    id: 'string',
+    assetClassId: 'string',
+    ticker: 'stringOrNull',
+    name: 'string',
+    accountId: 'stringOrNull',
+    quoteMode: 'string',
+    fixedIncomeInfo: 'jsonOrNull',
+    targetWeightPct: 'decimalOrNull',
+    maxWeightPct: 'decimalOrNull',
+    manualPrice: 'decimalOrNull',
+    manualPriceAt: 'dateOrNull',
+    manualValueCents: 'centsOrNull',
+    manualValueAt: 'dateOrNull',
+    isArchived: 'bool',
+  },
+  assetTrades: {
+    id: 'string',
+    assetId: 'string',
+    kind: 'string',
+    tradeDate: 'date',
+    quantity: 'decimal',
+    unitPrice: 'decimal',
+    feesCents: 'cents',
+    totalCents: 'cents',
+    splitRatio: 'decimalOrNull',
+    notes: 'stringOrNull',
+    source: 'string',
+  },
+  dividends: {
+    id: 'string',
+    assetId: 'string',
+    kind: 'string',
+    payDate: 'date',
+    exDate: 'dateOrNull',
+    amountCents: 'cents',
+    grossCents: 'centsOrNull',
+    quantityBase: 'decimalOrNull',
+    perShare: 'decimalOrNull',
+    notes: 'stringOrNull',
+    source: 'string',
+  },
   accounts: { id: 'string', name: 'string', kind: 'string', color: 'string', isArchived: 'bool' },
   creditCards: {
     id: 'string',
@@ -251,6 +296,9 @@ const COLUMNS: Record<string, Record<string, ColumnType>> = {
 
 /** Campos que apontam para outros cadastros (precisam ser do mesmo usuário). */
 const REFS: Record<string, Record<string, string>> = {
+  assets: { assetClassId: 'assetClasses', accountId: 'accounts' },
+  assetTrades: { assetId: 'assets' },
+  dividends: { assetId: 'assets' },
   creditCards: { accountId: 'accounts' },
   categories: { parentId: 'categories' },
   payees: { defaultCategoryId: 'categories' },
@@ -284,6 +332,10 @@ const TABLE_ORDER = [
   'recurringTemplates',
   'installmentPlans',
   'transactions',
+  'assetClasses',
+  'assets',
+  'assetTrades',
+  'dividends',
 ] as const
 type Table = (typeof TABLE_ORDER)[number]
 
@@ -337,6 +389,14 @@ function coerce(table: Table, record: Record<string, unknown>): Record<string, u
         out[key] = date
         break
       }
+      case 'decimal':
+      case 'decimalOrNull':
+        if (!/^-?\d+(\.\d+)?$/.test(String(value))) invalid(`${table}.${key}`)
+        out[key] = String(value)
+        break
+      case 'jsonOrNull':
+        out[key] = typeof value === 'object' ? value : null
+        break
       case 'strings':
         out[key] = Array.isArray(value)
           ? value.filter((item) => typeof item === 'string').slice(0, 20)
@@ -366,6 +426,10 @@ function delegate(tx: Prisma.TransactionClient, table: Table): Delegate {
     recurringTemplates: tx.recurringTemplate,
     installmentPlans: tx.installmentPlan,
     transactions: tx.transaction,
+    assetClasses: tx.assetClass,
+    assets: tx.asset,
+    assetTrades: tx.assetTrade,
+    dividends: tx.dividend,
   }
   return map[table] as Delegate
 }
@@ -414,6 +478,11 @@ export function exportsRouter(prisma: PrismaClient): Router {
       plans,
       transactions,
       months,
+      assetClasses,
+      targetAllocations,
+      assets,
+      assetTrades,
+      dividends,
     ] = await Promise.all([
       prisma.userSettings.findUnique({ where: { userId } }),
       prisma.account.findMany({ where: live }),
@@ -427,6 +496,14 @@ export function exportsRouter(prisma: PrismaClient): Router {
       prisma.installmentPlan.findMany({ where: live }),
       prisma.transaction.findMany({ where: live, orderBy: [{ nature: 'asc' }, { date: 'asc' }] }),
       prisma.monthSettings.findMany({ where: { userId } }),
+      prisma.assetClass.findMany({ where: live, orderBy: { sortOrder: 'asc' } }),
+      prisma.targetAllocation.findMany({ where: { userId } }),
+      prisma.asset.findMany({ where: live }),
+      prisma.assetTrade.findMany({
+        where: live,
+        orderBy: [{ tradeDate: 'asc' }, { createdAt: 'asc' }],
+      }),
+      prisma.dividend.findMany({ where: live }),
     ])
     const body: Backup = {
       app: 'orla',
@@ -442,6 +519,11 @@ export function exportsRouter(prisma: PrismaClient): Router {
         installmentPlans: plans.map(plain),
         transactions: transactions.map(plain),
         monthSettings: months.map(plain),
+        assetClasses: assetClasses.map(plain),
+        targetAllocations: targetAllocations.map(plain),
+        assets: assets.map(plain),
+        assetTrades: assetTrades.map(plain),
+        dividends: dividends.map(plain),
       },
     }
     res.setHeader(
@@ -588,6 +670,23 @@ export function exportsRouter(prisma: PrismaClient): Router {
           })
           if (exists) counts.updated += 1
           else counts.created += 1
+        }
+
+        // Metas de alocação: só das classes que ficaram com este usuário.
+        const myClasses = owned.get('assetClasses') ?? new Set<string>()
+        for (const record of backup.data.targetAllocations ?? []) {
+          const assetClassId = String(record.assetClassId)
+          const target = String(record.targetPct)
+          if (!myClasses.has(assetClassId) || !/^\d+(\.\d+)?$/.test(target)) continue
+          const max =
+            record.maxPct === null || record.maxPct === undefined ? null : String(record.maxPct)
+          const exists = await tx.targetAllocation.findUnique({ where: { assetClassId } })
+          if (exists && mode === 'merge') continue
+          await tx.targetAllocation.upsert({
+            where: { assetClassId },
+            create: { userId, assetClassId, targetPct: target, maxPct: max },
+            update: { targetPct: target, maxPct: max },
+          })
         }
 
         const settings = backup.data.settings

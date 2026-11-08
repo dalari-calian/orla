@@ -15,6 +15,12 @@ const envSchema = z.object({
     .min(32, 'REFRESH_TOKEN_PEPPER precisa ter pelo menos 32 caracteres'),
   SIGNUP_MODE: z.enum(['invite', 'open', 'closed']).default('invite'),
   SIGNUP_INVITE_CODE: z.string().optional(),
+  /** Cotações (Fase 5): sem token, o provedor fica desligado (preço manual). */
+  BRAPI_TOKEN: z.string().trim().min(1).optional(),
+  /** Orçamento de chamadas ao provedor por mês; para ao atingir (RC-32). */
+  QUOTES_MONTHLY_BUDGET: z.coerce.number().int().min(0).default(13_000),
+  /** Segredo do cron (GET /jobs/quotes com Authorization: Bearer <segredo>). */
+  CRON_SECRET: z.string().min(16).optional(),
 })
 
 export type Env = z.infer<typeof envSchema>

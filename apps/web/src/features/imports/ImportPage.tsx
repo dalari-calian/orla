@@ -15,12 +15,27 @@ import {
   suggestMapping,
   TRANSACTION_FIELDS,
   transactionRowToDraft,
+  ASSET_FIELDS,
+  assetRowToDraft,
+  buildPortfolioDrafts,
+  DIVIDEND_FIELDS,
+  dividendRowToDraft,
+  fixedIncomeLabels,
+  type ImportField,
+  initialPositions,
+  readPortfolioSheet,
+  TRADE_FIELDS,
+  tradeRowToDraft,
 } from '@orla/core/import'
 import { formatBRL } from '@orla/core/money'
 import type { ImportJob, ImportKind, ImportRowCheck } from '@orla/contracts'
 import {
+  ArrowLeftRight,
   CalendarRange,
+  ChartPie,
   CircleAlert,
+  Coins,
+  HandCoins,
   CircleCheck,
   Copy,
   Download,
@@ -30,7 +45,7 @@ import {
   Upload,
   type LucideIcon,
 } from 'lucide-react'
-import { useId, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useId, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -41,7 +56,14 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { SelectField } from '@/components/ui/Select'
 import { SlideSwap } from '@/components/ui/SlideSwap'
 import { useToast } from '@/components/ui/Toast'
-import { monthLabel, shortMonthLabel } from '@/features/finances/labels'
+import { monthLabel, shortDate, shortMonthLabel } from '@/features/finances/labels'
+import {
+  assetClassKindLabels,
+  dividendKindLabels,
+  formatPrice,
+  formatQuantity,
+  tradeKindLabels,
+} from '@/features/portfolio/labels'
 import { accounts, creditCards } from '@/features/registrations/api'
 import { errorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -53,6 +75,7 @@ import {
   useUndoImport,
 } from './api'
 import { ACCEPTED_FILES, downloadExample, type LoadedFile, readSpreadsheet } from './files'
+import { PortfolioSheetMap } from './PortfolioSheetMap'
 
 type Step = 'kind' | 'file' | 'map' | 'preview' | 'done'
 const STEPS: { key: Step; label: string }[] = [
@@ -62,27 +85,75 @@ const STEPS: { key: Step; label: string }[] = [
   { key: 'preview', label: 'Conferir' },
 ]
 
-const KINDS: { kind: ImportKind; title: string; description: string; icon: LucideIcon }[] = [
+const KINDS: {
+  kind: ImportKind
+  title: string
+  description: string
+  icon: LucideIcon
+  group: 'Finanças' | 'Carteira'
+}[] = [
   {
     kind: 'monthly_sheet',
     title: 'Minha planilha mensal',
     description:
       'Um bloco por mês (JANEIRO, FEVEREIRO...) com entradas, despesas, parcelas e "valor economizar".',
     icon: FileSpreadsheet,
+    group: 'Finanças',
   },
   {
     kind: 'transactions',
     title: 'Lançamentos',
     description: 'Uma linha por gasto ou receita (template do Orla, extrato ou outra planilha).',
     icon: ReceiptText,
+    group: 'Finanças',
   },
   {
     kind: 'installments',
     title: 'Parcelamentos',
     description: 'Uma linha por compra parcelada, com a parcela em que você está.',
     icon: CalendarRange,
+    group: 'Finanças',
+  },
+  {
+    kind: 'portfolio_sheet',
+    title: 'Planilha da carteira',
+    description:
+      'Aportes por mês (FIIs, Ações, Renda Fixa), balanço mensal e proventos, com as metas no título.',
+    icon: ChartPie,
+    group: 'Carteira',
+  },
+  {
+    kind: 'assets',
+    title: 'Ativos',
+    description: 'Uma linha por ativo: classe, ticker ou nome, corretora.',
+    icon: Coins,
+    group: 'Carteira',
+  },
+  {
+    kind: 'trades',
+    title: 'Operações',
+    description: 'Compras, vendas, bonificações e desdobramentos (notas de corretagem).',
+    icon: ArrowLeftRight,
+    group: 'Carteira',
+  },
+  {
+    kind: 'dividends',
+    title: 'Proventos',
+    description: 'Dividendos, JCP e rendimentos recebidos.',
+    icon: HandCoins,
+    group: 'Carteira',
   },
 ]
+
+const SHEET_KINDS: ImportKind[] = ['monthly_sheet', 'portfolio_sheet']
+
+const FIELDS_BY_KIND: Partial<Record<ImportKind, readonly ImportField[]>> = {
+  transactions: TRANSACTION_FIELDS,
+  installments: INSTALLMENT_FIELDS,
+  assets: ASSET_FIELDS,
+  trades: TRADE_FIELDS,
+  dividends: DIVIDEND_FIELDS,
+}
 
 /** Progresso do wizard (passos curtos, docs/08). */
 function Stepper({ step }: { step: Step }) {
@@ -157,6 +228,42 @@ function describeRow(row: ParsedImportRow): { title: string; subtitle: string; a
       amount: formatBRL(draft.totalCents),
     }
   }
+  if (draft.kind === 'classTarget') {
+    return {
+      title: `Meta de ${draft.className ?? (draft.classKind ? assetClassKindLabels[draft.classKind] : 'classe')}`,
+      subtitle: 'Alocação por classe',
+      amount: `${draft.targetPct.replace('.', ',')}%`,
+    }
+  }
+  if (draft.kind === 'asset') {
+    return {
+      title: draft.ticker ?? draft.name,
+      subtitle: draft.manualPrice
+        ? `Ativo · último preço ${formatPrice(draft.manualPrice)}`
+        : draft.manualValueCents !== null
+          ? `Renda fixa · saldo ${formatBRL(draft.manualValueCents)}`
+          : 'Ativo',
+      amount: '',
+    }
+  }
+  if (draft.kind === 'assetTrade') {
+    const split = draft.tradeKind === 'split' || draft.tradeKind === 'reverse_split'
+    const total =
+      draft.totalCents ??
+      Math.round(Number(draft.quantity) * Number(draft.unitPrice) * 100) + draft.feesCents
+    return {
+      title: draft.asset.ticker ?? draft.asset.name,
+      subtitle: `${tradeKindLabels[draft.tradeKind]} · ${shortDate(draft.date)}${split || draft.asset.ticker === null ? '' : ` · ${formatQuantity(draft.quantity)} × ${formatPrice(draft.unitPrice)}`}`,
+      amount: split ? '' : formatBRL(total),
+    }
+  }
+  if (draft.kind === 'dividend') {
+    return {
+      title: draft.asset.ticker ?? draft.asset.name,
+      subtitle: `${dividendKindLabels[draft.dividendKind]} · ${shortDate(draft.payDate)}`,
+      amount: `+${formatBRL(draft.amountCents)}`,
+    }
+  }
   return {
     title: `Meta investida de ${monthLabel(draft.month)}`,
     subtitle: 'Vai para a aba Investimento do mês',
@@ -211,7 +318,8 @@ export function ImportPage() {
   const fileInputId = useId()
 
   const sheet = file?.sheets.find((item) => item.name === sheetName) ?? file?.sheets[0]
-  const fields = kind === 'installments' ? INSTALLMENT_FIELDS : TRANSACTION_FIELDS
+  const fields = FIELDS_BY_KIND[kind] ?? TRANSACTION_FIELDS
+  const sheetKind = SHEET_KINDS.includes(kind)
   const headerIndex = sheet ? headerRowIndex(sheet.rows) : 0
   const headers = useMemo(
     () => (sheet?.rows[headerIndex] ?? []).map((cell) => cellText(cell)),
@@ -225,6 +333,22 @@ export function ImportPage() {
     [kind, sheet, year],
   )
   const bankValues = useMemo(() => (monthly ? distinctBanks(monthly.lines) : []), [monthly])
+  const [fiNames, setFiNames] = useState<Record<string, string>>({})
+  const [portfolioAccount, setPortfolioAccount] = useState('')
+  const [initialPrices, setInitialPrices] = useState<Record<string, string>>({})
+  const [initialValues, setInitialValues] = useState<Record<string, number | null>>({})
+  const portfolio = useMemo(
+    () =>
+      kind === 'portfolio_sheet' && sheet
+        ? readPortfolioSheet(sheet.rows, Number(year) || new Date().getFullYear())
+        : null,
+    [kind, sheet, year],
+  )
+  const fiLabels = useMemo(() => (portfolio ? fixedIncomeLabels(portfolio) : []), [portfolio])
+  const positions = useMemo(
+    () => (portfolio ? initialPositions(portfolio, { fixedIncomeNames: fiNames }) : []),
+    [portfolio, fiNames],
+  )
 
   function go(next: Step) {
     const order: Step[] = ['kind', 'file', 'map', 'preview', 'done']
@@ -256,7 +380,20 @@ export function ImportPage() {
   /** Passo 3: sugere o mapeamento (o salvo da última vez tem prioridade) e as associações. */
   function prepareMapping() {
     const last = saved.data?.[kind]
-    if (kind === 'monthly_sheet') {
+    if (kind === 'portfolio_sheet') {
+      const previous = (last?.fixedIncomeNames ?? {}) as Record<string, string>
+      setFiNames(
+        Object.fromEntries(
+          fiLabels.map(({ label }) => [
+            normalizeText(label),
+            previous[normalizeText(label)] ?? titleCase(label),
+          ]),
+        ),
+      )
+      setPortfolioAccount(typeof last?.accountName === 'string' ? last.accountName : '')
+      setInitialPrices({})
+      setInitialValues({})
+    } else if (kind === 'monthly_sheet') {
       const previous = (last?.banks ?? {}) as Record<string, BankMapping>
       const next: Record<string, BankMapping> = {}
       for (const { value } of bankValues) {
@@ -290,7 +427,7 @@ export function ImportPage() {
   }
 
   const missingRequired =
-    kind !== 'monthly_sheet' && fields.some((field) => field.required && mapping[field.key] == null)
+    !sheetKind && fields.some((field) => field.required && mapping[field.key] == null)
 
   function parseRows(): ParsedImportRow[] {
     if (!sheet) return []
@@ -300,6 +437,23 @@ export function ImportPage() {
         ...monthly.ignored,
       ].sort((a, b) => a.rowNumber - b.rowNumber)
     }
+    if (kind === 'portfolio_sheet' && portfolio) {
+      return buildPortfolioDrafts(portfolio, {
+        fixedIncomeNames: fiNames,
+        accountName: portfolioAccount || null,
+        initialPrices: Object.fromEntries(
+          Object.entries(initialPrices).map(([key, value]) => [
+            key,
+            value.trim().replace(/\./g, '').replace(',', '.'),
+          ]),
+        ),
+        initialValues: Object.fromEntries(
+          Object.entries(initialValues).filter(
+            (entry): entry is [string, number] => entry[1] !== null,
+          ),
+        ),
+      })
+    }
     const month = currentCompetenceMonth()
     return sheet.rows.slice(headerIndex + 1).flatMap((row, i) => {
       const rowNumber = headerIndex + i + 2
@@ -307,7 +461,13 @@ export function ImportPage() {
       const parsed =
         kind === 'installments'
           ? installmentRowToDraft(rowNumber, values, month)
-          : transactionRowToDraft(rowNumber, values)
+          : kind === 'assets'
+            ? assetRowToDraft(rowNumber, values)
+            : kind === 'trades'
+              ? tradeRowToDraft(rowNumber, values)
+              : kind === 'dividends'
+                ? dividendRowToDraft(rowNumber, values)
+                : transactionRowToDraft(rowNumber, values)
       return parsed.skipped === 'Linha vazia' ? [] : [parsed]
     })
   }
@@ -324,12 +484,14 @@ export function ImportPage() {
       const savedMapping =
         kind === 'monthly_sheet'
           ? { banks, year: Number(year) }
-          : Object.fromEntries(
-              fields.map((field) => [
-                field.key,
-                mapping[field.key] == null ? null : headers[mapping[field.key] as number],
-              ]),
-            )
+          : kind === 'portfolio_sheet'
+            ? { fixedIncomeNames: fiNames, accountName: portfolioAccount, year: Number(year) }
+            : Object.fromEntries(
+                fields.map((field) => [
+                  field.key,
+                  mapping[field.key] == null ? null : headers[mapping[field.key] as number],
+                ]),
+              )
       const job = await createImport({ kind, fileName: file.fileName, mapping: savedMapping })
       const checks = new Map<number, ImportRowCheck>()
       for (let i = 0; i < withDraft.length; i += 500) {
@@ -443,24 +605,30 @@ export function ImportPage() {
         <SlideSwap index={direction}>
           {step === 'kind' && (
             <div className="space-y-3">
-              {KINDS.map((item) => (
-                <button
-                  key={item.kind}
-                  type="button"
-                  onClick={() => {
-                    setKind(item.kind)
-                    go('file')
-                  }}
-                  className="press flex w-full items-start gap-3 rounded-card bg-surface p-4 text-left shadow-card transition-colors hover:bg-surface-2"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent">
-                    <item.icon className="size-5" aria-hidden />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-headline font-semibold">{item.title}</span>
-                    <span className="block text-subhead text-text-2">{item.description}</span>
-                  </span>
-                </button>
+              {KINDS.map((item, index) => (
+                <Fragment key={item.kind}>
+                  {KINDS[index - 1]?.group !== item.group && (
+                    <h2 className="px-1 pt-2 text-footnote font-medium tracking-wide text-text-2 uppercase">
+                      {item.group}
+                    </h2>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKind(item.kind)
+                      go('file')
+                    }}
+                    className="press flex w-full items-start gap-3 rounded-card bg-surface p-4 text-left shadow-card transition-colors hover:bg-surface-2"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent">
+                      <item.icon className="size-5" aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-headline font-semibold">{item.title}</span>
+                      <span className="block text-subhead text-text-2">{item.description}</span>
+                    </span>
+                  </button>
+                </Fragment>
               ))}
               <Card className="space-y-2">
                 <CardHeader title="Planilhas de exemplo" />
@@ -545,7 +713,20 @@ export function ImportPage() {
                   }
                 />
               )}
-              {file && kind !== 'monthly_sheet' && sheet && (
+              {file && kind === 'portfolio_sheet' && (
+                <TextField
+                  label="Ano dos meses da aba"
+                  inputMode="numeric"
+                  value={year}
+                  onChange={(event) => setYear(event.target.value.replace(/\D/g, '').slice(0, 4))}
+                  hint={
+                    portfolio && portfolio.trades.length + portfolio.balances.length > 0
+                      ? `Encontrei ${portfolio.trades.length} aportes, ${portfolio.balances.length} linhas de balanço e ${portfolio.dividends.length} proventos.`
+                      : 'Não encontrei aportes nem balanço nesta aba (veja a planilha de exemplo).'
+                  }
+                />
+              )}
+              {file && !sheetKind && sheet && (
                 <p className="text-footnote text-text-2">
                   {Math.max(0, sheet.rows.length - headerIndex - 1)} linhas abaixo do cabeçalho.
                 </p>
@@ -557,7 +738,10 @@ export function ImportPage() {
                 <Button
                   className="flex-1"
                   disabled={
-                    !file || (kind === 'monthly_sheet' && (!monthly || monthly.months.length === 0))
+                    !file ||
+                    (kind === 'monthly_sheet' && (!monthly || monthly.months.length === 0)) ||
+                    (kind === 'portfolio_sheet' &&
+                      (!portfolio || portfolio.trades.length + portfolio.balances.length === 0))
                   }
                   onClick={prepareMapping}
                 >
@@ -567,7 +751,7 @@ export function ImportPage() {
             </Card>
           )}
 
-          {step === 'map' && kind !== 'monthly_sheet' && (
+          {step === 'map' && !sheetKind && (
             <Card className="space-y-4">
               <CardHeader title="De qual coluna vem cada campo?" />
               <p className="text-subhead text-text-2">
@@ -601,6 +785,34 @@ export function ImportPage() {
                 checking={checking}
                 error={missingRequired ? 'Escolha as colunas obrigatórias (*).' : checkError}
                 disabled={missingRequired}
+              />
+            </Card>
+          )}
+
+          {step === 'map' && kind === 'portfolio_sheet' && (
+            <Card className="space-y-4">
+              <PortfolioSheetMap
+                accounts={(accountList.data ?? []).filter((item) => !item.isArchived)}
+                accountName={portfolioAccount}
+                onAccountName={setPortfolioAccount}
+                labels={fiLabels}
+                names={fiNames}
+                onName={(key, value) => setFiNames((current) => ({ ...current, [key]: value }))}
+                positions={positions}
+                prices={initialPrices}
+                onPrice={(key, value) =>
+                  setInitialPrices((current) => ({ ...current, [key]: value }))
+                }
+                values={initialValues}
+                onValue={(key, value) =>
+                  setInitialValues((current) => ({ ...current, [key]: value }))
+                }
+              />
+              <MapFooter
+                onBack={() => go('file')}
+                onNext={() => void check()}
+                checking={checking}
+                error={checkError}
               />
             </Card>
           )}
@@ -808,6 +1020,8 @@ export function ImportPage() {
                     result.stats.installmentPlans > 0 &&
                       `${result.stats.installmentPlans} parcelamentos`,
                     result.stats.monthGoals > 0 && `${result.stats.monthGoals} metas investidas`,
+                    result.stats.trades > 0 && `${result.stats.trades} operações`,
+                    result.stats.dividends > 0 && `${result.stats.dividends} proventos`,
                   ]
                     .filter(Boolean)
                     .join(' · ') || 'Nada novo'}

@@ -38,7 +38,9 @@ export function makeApp(overrides: Partial<AppDeps> = {}): Express {
 
 /** Apaga todos os dados (as tabelas de domínio caem em cascata a partir de users). */
 export async function resetDatabase(): Promise<void> {
-  await testPrisma().$executeRawUnsafe('TRUNCATE TABLE users CASCADE')
+  await testPrisma().$executeRawUnsafe(
+    'TRUNCATE TABLE users, quotes_cache, provider_cache, provider_usage CASCADE',
+  )
 }
 
 /** Cadastra um usuário e devolve um agent do supertest já logado (com os cookies). */

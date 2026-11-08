@@ -17,12 +17,15 @@ import { categoriesRouter } from './routes/categories.ts'
 import { creditCardsRouter } from './routes/credit-cards.ts'
 import { healthRouter } from './routes/health.ts'
 import { installmentPlansRouter } from './routes/installment-plans.ts'
+import { jobsRouter } from './routes/jobs.ts'
+import { portfolioRouter } from './routes/portfolio.ts'
 import { monthsRouter } from './routes/months.ts'
 import { payeesRouter } from './routes/payees.ts'
 import { recurringTemplatesRouter } from './routes/recurring-templates.ts'
 import { settingsRouter } from './routes/settings.ts'
 import { transactionsRouter } from './routes/transactions.ts'
 import { AuthService } from './services/auth.ts'
+import { BrapiProvider, QuoteService, type QuoteProvider } from './services/quotes.ts'
 
 export interface AppDeps {
   prisma: PrismaClient
@@ -41,6 +44,12 @@ export interface AppDeps {
   rateLimits?: { loginPerMinute?: number; signupPerMinute?: number }
   /** Relógio (os testes fixam a data). Padrão: agora. */
   now?: () => Date
+  /** Provedor de cotações (os testes injetam um falso). Padrão: brapi sem token = desligado. */
+  quoteProvider?: QuoteProvider
+  /** Chamadas ao provedor por mês (padrão 13 mil, RC-32). */
+  quotesMonthlyBudget?: number
+  /** Segredo do cron de cotações; sem ele, /jobs/quotes responde 401. */
+  cronSecret?: string | undefined
 }
 
 /** Monta o app Express. Dependências injetadas para facilitar testes. */
@@ -54,6 +63,11 @@ export function createApp(deps: AppDeps): Express {
     inviteCode: deps.inviteCode,
   })
 
+  const quotes = new QuoteService(prisma, deps.quoteProvider ?? new BrapiProvider(undefined), {
+    monthlyBudget: deps.quotesMonthlyBudget ?? 13_000,
+    now: deps.now ?? (() => new Date()),
+  })
+
   const app = express()
   app.disable('x-powered-by')
   app.set('trust proxy', 1)
@@ -65,6 +79,7 @@ export function createApp(deps: AppDeps): Express {
   const v1 = express.Router()
   v1.use(originCheck(deps.appOrigin))
   v1.use(healthRouter(deps))
+  v1.use(jobsRouter(prisma, quotes, deps.cronSecret))
   v1.use(
     authRouter({
       prisma,
@@ -91,6 +106,7 @@ export function createApp(deps: AppDeps): Express {
   authed.use(dashboardRouter(prisma, clock))
   authed.use(importsRouter(prisma, clock))
   authed.use(exportsRouter(prisma))
+  authed.use(portfolioRouter(prisma, clock, quotes))
   v1.use(authed)
 
   app.use('/api/v1', v1)

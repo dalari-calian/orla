@@ -37,6 +37,14 @@ import {
 } from '../lib/finance.ts'
 import { parse } from '../lib/validate.ts'
 import { userIdOf } from '../middleware/auth.ts'
+import {
+  checkPortfolioDraft,
+  isPortfolioDraft,
+  portfolioContext,
+  portfolioWriter,
+  undoPortfolio,
+  type PortfolioContext,
+} from '../lib/portfolio-import.ts'
 
 // ─── Cadastros do usuário, por nome ──────────────────────────────────────────
 
@@ -92,6 +100,8 @@ interface CheckContext {
   generated: Set<string>
   plans: Set<string>
   goals: Map<string, number | null>
+  /** Carteira (Fase 5): classes, ativos, operações e proventos existentes. */
+  portfolio: PortfolioContext
 }
 
 const planKey = (description: string, count: number, totalCents: number) =>
@@ -114,7 +124,7 @@ function transactionMonth(
 }
 
 function checkRefs(
-  draft: Exclude<ImportDraftInput, { kind: 'monthGoal' }>,
+  draft: Extract<ImportDraftInput, { kind: 'transaction' | 'installmentPlan' }>,
   categoryKind: 'income' | 'expense',
   ctx: CheckContext,
   errors: string[],
@@ -170,6 +180,12 @@ function checkDraft(draft: ImportDraftInput, ctx: CheckContext): Omit<ImportRowC
       duplicate = true
       messages.push(`Provável duplicado: já existe o parcelamento "${draft.description}"`)
     }
+  } else if (isPortfolioDraft(draft)) {
+    const result = checkPortfolioDraft(draft, ctx.portfolio)
+    errors.push(...result.errors)
+    messages.push(...result.messages)
+    creates.push(...result.creates)
+    duplicate = result.duplicate
   } else {
     const previous = ctx.goals.get(draft.month)
     if (previous !== undefined && previous !== null && previous > 0) {
@@ -188,9 +204,10 @@ async function checkContext(
   userId: string,
   drafts: readonly ImportDraftInput[],
 ): Promise<CheckContext> {
-  const [lookups, settings] = await Promise.all([
+  const [lookups, settings, portfolio] = await Promise.all([
     loadLookups(db, userId),
     financeSettings(db, userId),
+    portfolioContext(db, userId),
   ])
   const months = drafts.flatMap((draft) =>
     draft.kind === 'transaction'
@@ -245,6 +262,7 @@ async function checkContext(
   }
   return {
     lookups,
+    portfolio,
     cardCompetence: settings.cardCompetence,
     existing,
     generated,
@@ -271,6 +289,9 @@ const EMPTY_STATS: ImportJob['stats'] = {
   transactions: 0,
   installmentPlans: 0,
   monthGoals: 0,
+  assets: 0,
+  trades: 0,
+  dividends: 0,
   created: [],
   skipped: 0,
 }
@@ -468,11 +489,42 @@ export function importsRouter(prisma: PrismaClient, clock: Clock): Router {
         }
 
         const entityOf = new Map<string, { type: string; id: string | null }>()
+        const portfolio = portfolioWriter(tx, userId, ctx.portfolio, {
+          createMissing: input.createMissing,
+          ensureAccount: (name) => ensureRef('account', name),
+          created,
+        })
 
         for (const { row, draft } of drafts) {
           const check = checkDraft(draft, ctx)
           if (check.status === 'error') {
             stats.skipped += 1
+            continue
+          }
+          if (isPortfolioDraft(draft)) {
+            const entity = await portfolio.apply(draft)
+            if (draft.kind === 'asset') stats.assets += 1
+            if (!entity) {
+              if (draft.kind !== 'asset') stats.skipped += 1
+              continue
+            }
+            if (entity.type === 'target_allocation') {
+              await tx.importRow.update({
+                where: { id: row.id },
+                data: {
+                  entityType: entity.type,
+                  entityId: entity.id,
+                  raw: {
+                    ...(row.raw as Record<string, string>),
+                    _previous: entity.previous ? JSON.stringify(entity.previous) : 'none',
+                  },
+                },
+              })
+            } else {
+              entityOf.set(row.id, { type: entity.type, id: entity.id })
+              if (entity.type === 'asset_trade') stats.trades += 1
+              if (entity.type === 'dividend') stats.dividends += 1
+            }
             continue
           }
           if (draft.kind === 'monthGoal') {
@@ -640,6 +692,9 @@ export function importsRouter(prisma: PrismaClient, clock: Clock): Router {
           stats.installmentPlans += 1
         }
 
+        // RI-05: posições recalculadas; venda maior que a posição desfaz tudo.
+        await portfolio.finish()
+
         for (const [rowId, entity] of entityOf) {
           await tx.importRow.update({
             where: { id: rowId },
@@ -724,6 +779,7 @@ export function importsRouter(prisma: PrismaClient, clock: Clock): Router {
             },
           })
         }
+        await undoPortfolio(tx, userId, rows, now)
         // Cadastros criados pela importação saem só se nada mais os usa.
         const inUse = { deletedAt: null }
         for (const id of ids('account')) {

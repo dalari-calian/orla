@@ -23,12 +23,15 @@ import {
 import { prefersReducedMotion } from '@/lib/motion'
 import { shortMonthLabel } from './labels'
 
-const compact = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 })
+export const compact = new Intl.NumberFormat('pt-BR', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
 /** Eixo em reais compactos: 600000 centavos → "6 mil". */
-const axisMoney = (cents: number) => compact.format(cents / 100)
-const monthTick = (month: string) => shortMonthLabel(month).slice(0, 3)
+export const axisMoney = (cents: number) => compact.format(cents / 100)
+export const monthTick = (month: string) => shortMonthLabel(month).slice(0, 3)
 
-const tick = { fill: 'var(--text-2)', fontSize: 12 }
+export const tick = { fill: 'var(--text-2)', fontSize: 12 }
 
 interface TooltipEntry {
   name?: string | number
@@ -38,7 +41,7 @@ interface TooltipEntry {
 }
 
 /** Balão do tooltip no estilo do app (superfície, sombra, valores em R$). */
-function ChartTooltip({
+export function ChartTooltip({
   active,
   payload,
   label,

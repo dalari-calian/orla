@@ -37,7 +37,7 @@ Disponíveis para download na tela de importação (`.xlsx` com uma aba de exemp
 
 **Ativos**: `classe; ticker; nome; corretora; indexador; taxa; vencimento; peso_meta_classe; teto_carteira`
 
-**Operações**: `data; ticker_ou_nome; corretora; tipo (compra|venda|bonificacao|desdobramento); quantidade; preco; taxas; valor_total`
+**Operações**: `data; ticker_ou_nome; corretora; tipo (compra|venda|bonificacao|desdobramento|grupamento|subscricao|aplicacao|resgate|ajuste); quantidade; preco; taxas; valor_total` — `ajuste` = posição informada (quantidade + preço médio na data)
 
 **Proventos**: `data_pagamento; ticker; tipo (dividendo|jcp|rendimento); valor; valor_por_cota; quantidade_base`
 
@@ -58,10 +58,21 @@ Além dos templates, o wizard tem o tipo **Minha planilha mensal**, que lê o fo
 
 O SheetJS (0.20.3, versão oficial do site deles — a do npm tem falhas conhecidas) só é carregado nas telas de importar/exportar.
 
+### Planilha da carteira do dono (aba "AÇÕES - 2026", Fase 5)
+
+- **Título**: "FIIS - 30%", "AÇÕES - 25%", "RENDA FIXA - 45%" → metas de alocação por classe.
+- **Aportes** por mês (mês na coluna B): FIIs em C–F e Ações em G–J ("TICKER - dd/mm/aaaa" | QTDE | VALOR | TOTAL); Renda fixa em K–L ("NOME - dd/mm/aaaa" | VALOR) e anotação em M (vira aviso). Data com o ano diferente do bloco (ex.: 2025 no bloco de 2026) é ajustada para o ano do bloco, com aviso; sem data, dia 1.
+- **Balanço mensal** (depois de "BALANÇO MENSAL"): mês, ativo, data, preço, total, quantidade. **Proventos** ao lado (I–L). "CONTROLE ..." em diante é ignorado.
+- **Posição anterior aos aportes** (decisão do dono): quantidade do 1º balanço − compras até ele vira uma compra em 1º/jan; o PM vem com o preço daquele balanço e **é editável** no passo 3. Renda fixa: saldo do 1º balanço − aportes até ele.
+- **Conciliação**: se um balanço mostra mais/menos cotas do que posição inicial + aportes explicam, entra uma compra/venda de ajuste na data e preço do balanço, com aviso.
+- **Último balanço**: preço de cada ativo (`manual_price`, vale até uma cotação mais nova) e saldo de cada renda fixa (`manual_value_cents`).
+- **Renda fixa**: os nomes variam entre aporte e balanço ("TESOURO 2031"/"SELIC 2031", "CAIXI. TB. NUBANK"…); no passo 3 o usuário dá o mesmo nome aos que são um só ativo.
+- Templates genéricos de **Ativos**, **Operações** e **Proventos** com exemplo + instruções, como os de finanças.
+
 ## 2. Exportação e backup
 
 - **RE-01** Exportar por entidade em CSV (pt-BR, `;`) ou XLSX, com filtro de período.
-- **RE-02** **Backup completo** em JSON (todas as tabelas do usuário, versão do schema) e **restaurar** a partir dele (substituir ou mesclar).
+- **RE-02** (Fase 5: inclui classes, metas, ativos, operações e proventos) **Backup completo** em JSON (todas as tabelas do usuário, versão do schema) e **restaurar** a partir dele (substituir ou mesclar).
 - **RE-03** Backup automático do banco inteiro semanal via GitHub Actions (`pg_dump` criptografado com `age`/GPG) — porque o free do Neon tem janela de restauração curta.
 
 ## 3. Entrada manual (UX)
