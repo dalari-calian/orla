@@ -1,4 +1,10 @@
-import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react'
+import {
+  forwardRef,
+  useId,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type TextareaHTMLAttributes,
+} from 'react'
 import { cn } from '@/lib/cn'
 
 /** Classes de um campo de texto: ≥16px para o iOS não dar zoom (RNF-12). */
@@ -67,3 +73,26 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
     </FieldShell>
   )
 })
+
+type TextAreaFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  label: string
+  error?: string | undefined
+  hint?: ReactNode
+}
+
+/** Texto longo (ex.: descrição de um relato). Cresce com o conteúdo até um limite. */
+export function TextAreaField({ label, error, hint, className, id, ...props }: TextAreaFieldProps) {
+  const generated = useId()
+  const inputId = id ?? generated
+  return (
+    <FieldShell label={label} error={error} hint={hint} htmlFor={inputId} className={className}>
+      <textarea
+        id={inputId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
+        className={cn(inputClass, 'min-h-32 resize-y py-3 [field-sizing:content] max-h-80')}
+        {...props}
+      />
+    </FieldShell>
+  )
+}

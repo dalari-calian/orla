@@ -18,6 +18,7 @@ Projeto: **Orla** — gestão financeira pessoal e de investimentos, substituind
 | 12  | `12-requisitos-nao-funcionais.md` | Performance, segurança, PWA, testes, observabilidade                                | Sempre                                      |
 | 13  | `13-roadmap.md`                   | Fases de implementação com critérios de aceite                                      | Planejar o próximo passo                    |
 | 14  | `14-ambiente-local.md`            | Pré-requisitos da máquina, portas, .env, script de verificação                      | Antes da Fase 0 e quando o ambiente quebrar |
+| 15  | `15-bugs-e-melhorias.md`          | Relatos de bug/melhoria no app, status e a fila de agentes                          | Ao triar relatos ou rodar a fila            |
 
 ## Como usar com o Claude Code
 

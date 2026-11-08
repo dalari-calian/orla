@@ -73,6 +73,12 @@ const implemented: RouteObject[] = [
     lazy: async () => ({ Component: (await import('@/features/imports/ImportPage')).ImportPage }),
   },
   {
+    path: '/config/feedback',
+    lazy: async () => ({
+      Component: (await import('@/features/feedback/FeedbackPage')).FeedbackPage,
+    }),
+  },
+  {
     path: '/config/importacoes',
     lazy: async () => ({
       Component: (await import('@/features/imports/ImportHistoryPage')).ImportHistoryPage,

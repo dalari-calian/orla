@@ -186,6 +186,18 @@ Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras
 - Exportação: CSV com `;`, BOM e as colunas do template (exportar → editar → importar de volta). `format=json` devolve `{ columns, rows }` e o navegador monta o .xlsx.
 - Backup: todas as tabelas do usuário (sem `userId`). Restaurar nunca toca em IDs de outro usuário; referências a cadastros que não são do usuário viram `null`. `replace` faz soft delete do que não está no arquivo.
 
+### Relatos (bugs e melhorias)
+
+Ver docs/15. `GET /auth/me` traz `isAdmin` (usuário em `ADMIN_USERNAMES`).
+
+| Método | Rota                   | Descrição                                                                 |
+| ------ | ---------------------- | ------------------------------------------------------------------------- |
+| POST   | `/feedback`            | `{ kind, title, description, page?, context? }` → 201; 429 após 20 em 24 h |
+| GET    | `/feedback/mine`       | relatos do usuário (status e nota do dono; sem notas do agente)           |
+| DELETE | `/feedback/:id`        | retira o próprio relato enquanto **pendente** (409 depois)                |
+| GET    | `/admin/feedback`      | só dono (403): `?status=&kind=` → `{ data, counts }` com histórico        |
+| PATCH  | `/admin/feedback/:id`  | só dono: `{ status?, priority?, ownerNote? }`; transição inválida → 400   |
+
 ### Jobs (protegidos por `CRON_SECRET`)
 
 `GET /jobs/quotes` (diário) · `GET /jobs/keepalive` (opcional)

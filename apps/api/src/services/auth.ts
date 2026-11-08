@@ -17,6 +17,8 @@ export interface AuthConfig {
   refreshPepper: string
   signupMode: SignupMode
   inviteCode: string | undefined
+  /** Usuários donos do app (minúsculos): veem a fila de relatos. */
+  adminUsernames?: readonly string[]
 }
 
 export interface SessionTokens {
@@ -143,6 +145,7 @@ export class AuthService {
         username: user.username,
         displayName: user.displayName,
         onboardingCompleted: false,
+        isAdmin: this.isAdminUsername(user.username),
       },
       tokens,
     }
@@ -205,6 +208,10 @@ export class AuthService {
     })
   }
 
+  isAdminUsername(username: string): boolean {
+    return (this.config.adminUsernames ?? []).includes(username.toLowerCase())
+  }
+
   async me(userId: string): Promise<MeResponse> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -216,6 +223,7 @@ export class AuthService {
       username: user.username,
       displayName: user.displayName,
       onboardingCompleted: Boolean(user.settings?.onboardingCompletedAt),
+      isAdmin: this.isAdminUsername(user.username),
     }
   }
 }

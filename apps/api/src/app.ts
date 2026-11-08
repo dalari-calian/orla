@@ -4,6 +4,7 @@ import express, { type Express } from 'express'
 import { createClock } from './lib/clock.ts'
 import { dashboardRouter } from './routes/dashboard.ts'
 import { exportsRouter } from './routes/exports.ts'
+import { feedbackRouter } from './routes/feedback.ts'
 import { importsRouter } from './routes/imports.ts'
 import { RateLimiter } from './lib/rate-limit.ts'
 import { requireAuth } from './middleware/auth.ts'
@@ -50,6 +51,8 @@ export interface AppDeps {
   quotesMonthlyBudget?: number
   /** Segredo do cron de cotações; sem ele, /jobs/quotes responde 401. */
   cronSecret?: string | undefined
+  /** Donos do app (ADMIN_USERNAMES, minúsculos): fila de relatos em /admin/feedback. */
+  adminUsernames?: readonly string[]
 }
 
 /** Monta o app Express. Dependências injetadas para facilitar testes. */
@@ -61,6 +64,7 @@ export function createApp(deps: AppDeps): Express {
     refreshPepper: deps.refreshPepper,
     signupMode: deps.signupMode,
     inviteCode: deps.inviteCode,
+    adminUsernames: deps.adminUsernames ?? [],
   })
 
   const quotes = new QuoteService(prisma, deps.quoteProvider ?? new BrapiProvider(undefined), {
@@ -107,6 +111,7 @@ export function createApp(deps: AppDeps): Express {
   authed.use(importsRouter(prisma, clock))
   authed.use(exportsRouter(prisma))
   authed.use(portfolioRouter(prisma, clock, quotes))
+  authed.use(feedbackRouter(prisma, auth))
   v1.use(authed)
 
   app.use('/api/v1', v1)

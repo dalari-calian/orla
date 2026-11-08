@@ -21,6 +21,8 @@ const envSchema = z.object({
   QUOTES_MONTHLY_BUDGET: z.coerce.number().int().min(0).default(13_000),
   /** Segredo do cron (GET /jobs/quotes com Authorization: Bearer <segredo>). */
   CRON_SECRET: z.string().min(16).optional(),
+  /** Usuários donos do app (separados por vírgula): veem e triam a fila de relatos. */
+  ADMIN_USERNAMES: z.string().optional(),
 })
 
 export type Env = z.infer<typeof envSchema>

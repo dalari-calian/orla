@@ -54,6 +54,8 @@ export const meResponseSchema = z.object({
   username: z.string(),
   displayName: z.string().nullable(),
   onboardingCompleted: z.boolean(),
+  /** Dono do app (ADMIN_USERNAMES): vê a fila de relatos. */
+  isAdmin: z.boolean().default(false),
 })
 export type MeResponse = z.infer<typeof meResponseSchema>
 

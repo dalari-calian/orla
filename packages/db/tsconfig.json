@@ -1,4 +1,4 @@
 {
   "extends": "@orla/config/tsconfig.node.json",
-  "include": ["src", "prisma", "prisma.config.ts"]
+  "include": ["src", "prisma", "scripts", "prisma.config.ts"]
 }

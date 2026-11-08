@@ -11,6 +11,7 @@ import {
   Landmark,
   LayoutDashboard,
   ListChecks,
+  MessageSquareWarning,
   PiggyBank,
   ReceiptText,
   Repeat,
@@ -232,6 +233,14 @@ export const screens: readonly Screen[] = [
     description: 'Exporte para CSV/XLSX ou faça um backup completo.',
     phase: 4,
     icon: Download,
+    section: 'config',
+  },
+  {
+    path: '/config/feedback',
+    title: 'Bugs e melhorias',
+    description: 'Reporte problemas, sugira melhorias e acompanhe o andamento.',
+    phase: 5,
+    icon: MessageSquareWarning,
     section: 'config',
   },
 ]

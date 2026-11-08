@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router'
+import { FeedbackProvider } from '@/features/feedback/FeedbackSheet'
 import { EntryProvider, useEntrySheet, type EntryKind } from '@/features/finances/EntrySheet'
 import { Sidebar } from './Sidebar'
 import { TabBar } from './TabBar'
@@ -63,7 +64,9 @@ function Shell() {
 export function AppShell() {
   return (
     <EntryProvider>
-      <Shell />
+      <FeedbackProvider>
+        <Shell />
+      </FeedbackProvider>
     </EntryProvider>
   )
 }

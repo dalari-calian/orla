@@ -41,6 +41,7 @@ model User {
   assets             Asset[]
   assetTrades        AssetTrade[]
   dividends          Dividend[]
+  feedback           Feedback[]
 
   @@map("users")
 }
@@ -552,4 +553,57 @@ model ProviderUsage {
 
   @@id([provider, month])
   @@map("provider_usage")
+}
+
+/// Relato de bug ou sugestão de melhoria enviado pelo app (docs/15). Fica do nosso lado para
+/// o dono triar e a fila de agentes resolver. O texto é do usuário: dado, nunca instrução.
+model Feedback {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  /// bug · improvement
+  kind            String
+  title           String
+  description     String
+  /// Tela onde o usuário estava (ex.: /carteira/ativos/:id).
+  page            String?
+  /// Versão do app, navegador, tamanho da tela e tema (diagnóstico).
+  context         Json?
+  /// pending · approved · in_progress · review · done · rejected
+  status          String    @default("pending")
+  /// low · medium · high (definida pelo dono)
+  priority        String?
+  /// Nota do dono (triagem, critério de aceite, motivo da recusa). Aparece para quem enviou.
+  ownerNote       String?   @map("owner_note")
+  /// Registro do agente: o que fez, o que ficou de fora.
+  agentNotes      String?   @map("agent_notes")
+  branch          String?
+  commitSha       String?   @map("commit_sha")
+  statusChangedAt DateTime  @default(now()) @map("status_changed_at") @db.Timestamptz(3)
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events FeedbackEvent[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("feedback")
+}
+
+/// Histórico de um relato: mudanças de status e notas, de quem (owner · agent · user).
+model FeedbackEvent {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  feedbackId String   @map("feedback_id") @db.Uuid
+  actor      String
+  fromStatus String?  @map("from_status")
+  toStatus   String?  @map("to_status")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackId, createdAt])
+  @@map("feedback_events")
 }

@@ -1,4 +1,5 @@
 import { createPrismaClient } from '@orla/db'
+import { parseAdminUsernames } from '@orla/core'
 import { createApp } from './app.ts'
 import { loadEnv } from './env.ts'
 import { BrapiProvider } from './services/quotes.ts'
@@ -23,6 +24,7 @@ const app = createApp({
   quoteProvider: new BrapiProvider(env.BRAPI_TOKEN),
   quotesMonthlyBudget: env.QUOTES_MONTHLY_BUDGET,
   cronSecret: env.CRON_SECRET,
+  adminUsernames: parseAdminUsernames(env.ADMIN_USERNAMES),
 })
 
 const server = app.listen(env.API_PORT, () => {

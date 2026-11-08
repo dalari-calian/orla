@@ -1,7 +1,8 @@
-import { Moon, Plus, Sun } from 'lucide-react'
+import { MessageSquareWarning, Moon, Plus, Sun } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { cn } from '@/lib/cn'
 import { useMe } from '@/features/auth/api'
+import { useFeedback } from '@/features/feedback/FeedbackSheet'
 import { useTheme } from '@/lib/theme'
 import { sections } from '@/routes/screens'
 import { Logo } from './Logo'
@@ -10,6 +11,7 @@ import { Logo } from './Logo'
 export function Sidebar({ onNewEntry }: { onNewEntry: () => void }) {
   const [theme, setTheme] = useTheme()
   const me = useMe()
+  const { openFeedback } = useFeedback()
   const isDark =
     theme === 'dark' || (theme === 'system' && document.documentElement.dataset.theme === 'dark')
 
@@ -51,6 +53,16 @@ export function Sidebar({ onNewEntry }: { onNewEntry: () => void }) {
           ))}
         </ul>
       </nav>
+
+      <button
+        type="button"
+        onClick={() => openFeedback()}
+        aria-label="Reportar bug ou sugerir melhoria"
+        className="mx-1 flex min-h-11 items-center gap-3 self-stretch rounded-field px-3 text-left text-subhead text-text-2 transition-colors hover:bg-surface-2 hover:text-text"
+      >
+        <MessageSquareWarning className="size-5 shrink-0" aria-hidden />
+        <span className="truncate">Bug ou sugestão</span>
+      </button>
 
       <div className="flex items-center justify-between px-3 pt-4">
         <div className="min-w-0">

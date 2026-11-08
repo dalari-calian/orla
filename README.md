@@ -55,6 +55,10 @@ No dia a dia, basta abrir o Docker Desktop e rodar `pnpm start` (ou `pnpm db:up`
 
 Crie um token grátis em [brapi.dev](https://brapi.dev) e coloque `BRAPI_TOKEN=...` no `.env` (nunca no Git). Sem token, a carteira funciona com o preço informado à mão (ou o último preço importado). O app guarda as cotações em cache e respeita um orçamento mensal (`QUOTES_MONTHLY_BUDGET`), então abrir a carteira várias vezes não gasta chamadas. Para o cron diário, defina `CRON_SECRET` e chame `GET /api/v1/jobs/quotes` com `Authorization: Bearer <segredo>` ao fim do pregão.
 
+### Bugs e melhorias
+
+Qualquer usuário reporta pelo app (sidebar, aba Mais ou Configurações › Bugs e melhorias). Quem estiver em `ADMIN_USERNAMES` no `.env` vê a fila e aprova o que pode ser feito; depois, no Claude Code, peça para rodar a fila de relatos (`pnpm feedback list`). Detalhes em [docs/15](docs/15-bugs-e-melhorias.md).
+
 ### App instalável (PWA)
 
 O service worker só existe no build de produção (no `pnpm dev` ele fica desligado para não atrapalhar a recarga). Para testar a instalação, com a API rodando: `pnpm build` e depois `pnpm --filter @orla/web preview` — no Chrome/Edge aparece o ícone de instalar na barra de endereço. No celular, a instalação exige HTTPS (ou seja, o deploy).
