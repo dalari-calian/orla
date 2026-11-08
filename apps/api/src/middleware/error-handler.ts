@@ -1,3 +1,4 @@
+import { CompetenceMonthError, InstallmentError, MoneyError } from '@orla/core'
 import type { ApiError } from '@orla/contracts'
 import type { ErrorRequestHandler, RequestHandler } from 'express'
 import { AppError } from '../lib/errors.ts'
@@ -31,6 +32,17 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _ne
       },
     }
     res.status(error.status).json(body)
+    return
+  }
+
+  // Regras do core recusaram a entrada (ex.: parcela menor que R$ 0,01): erro do cliente.
+  if (
+    error instanceof InstallmentError ||
+    error instanceof MoneyError ||
+    error instanceof CompetenceMonthError
+  ) {
+    const body: ApiError = { error: { code: 'VALIDATION', message: error.message } }
+    res.status(400).json(body)
     return
   }
 

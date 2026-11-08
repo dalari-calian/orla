@@ -31,12 +31,35 @@ beforeAll(async () => {
   aliceIds.categories = category.body.id
   const payee = await alice.post('/api/v1/payees').send({ name: 'Padaria da Alice' })
   aliceIds.payees = payee.body.id
-  await alice
-    .post('/api/v1/recurring-templates')
-    .send({ description: 'Salário', amountCents: 600000, dayOfMonth: 5, startMonth: '2026-11' })
+  await alice.post('/api/v1/recurring-templates').send({
+    type: 'income',
+    description: 'Salário',
+    amountCents: 600000,
+    dayOfMonth: 5,
+    startMonth: '2026-11',
+  })
   await alice
     .patch('/api/v1/me/settings')
     .send({ savingsGoal: { mode: 'fixed', amountCents: 120000 } })
+
+  const transaction = await alice.post('/api/v1/transactions').send({
+    type: 'expense',
+    nature: 'planned',
+    description: 'Viagem da Alice',
+    amountCents: 50000,
+    date: '2026-11-20',
+  })
+  aliceIds.transactions = transaction.body.id
+  const plan = await alice.post('/api/v1/installment-plans').send({
+    description: 'Switch da Alice',
+    creditCardId: card.body.id,
+    purchaseDate: '2026-11-01',
+    totalCents: 120000,
+    installmentsCount: 12,
+  })
+  aliceIds['installment-plans'] = plan.body.plan?.id
+  const templates = await alice.get('/api/v1/recurring-templates')
+  aliceIds['recurring-templates'] = templates.body.data[0]?.id
 
   for (const [resource, id] of Object.entries(aliceIds)) {
     if (!id) throw new Error(`Falha ao criar ${resource} da Alice`)
@@ -44,14 +67,18 @@ beforeAll(async () => {
 })
 
 describe('isolamento entre usuários', () => {
-  it.each(['accounts', 'credit-cards', 'payees', 'recurring-templates'])(
-    'GET /%s do Bob não traz nada da Alice',
-    async (resource) => {
-      const res = await bob.get(`/api/v1/${resource}`)
-      expect(res.status).toBe(200)
-      expect(res.body.data).toEqual([])
-    },
-  )
+  it.each([
+    'accounts',
+    'credit-cards',
+    'payees',
+    'recurring-templates',
+    'transactions',
+    'installment-plans',
+  ])('GET /%s do Bob não traz nada da Alice', async (resource) => {
+    const res = await bob.get(`/api/v1/${resource}`)
+    expect(res.status).toBe(200)
+    expect(res.body.data).toEqual([])
+  })
 
   it('categorias do Bob são só as padrão dele', async () => {
     const res = await bob.get('/api/v1/categories')
@@ -83,6 +110,52 @@ describe('isolamento entre usuários', () => {
     },
   )
 
+  it.each(['transactions', 'installment-plans', 'recurring-templates'])(
+    'Bob não lê, edita, exclui nem restaura /%s da Alice (404)',
+    async (resource) => {
+      const id = aliceIds[resource]
+      expect((await bob.get(`/api/v1/${resource}/${id}`)).status).toBe(404)
+      expect(
+        (await bob.patch(`/api/v1/${resource}/${id}`).send({ description: 'Hackeado' })).status,
+      ).toBe(404)
+      expect((await bob.delete(`/api/v1/${resource}/${id}`)).status).toBe(404)
+      expect((await bob.post(`/api/v1/${resource}/${id}/restore`)).status).toBe(404)
+      const own = await alice.get(`/api/v1/${resource}/${id}`)
+      expect(own.status).toBe(200)
+      expect(JSON.stringify(own.body)).not.toContain('Hackeado')
+    },
+  )
+
+  it('Bob não paga, quita, cancela nem vê a fatura da Alice', async () => {
+    const tx = aliceIds.transactions
+    const plan = aliceIds['installment-plans']
+    const card = aliceIds['credit-cards']
+    expect((await bob.post(`/api/v1/transactions/${tx}/settle`)).status).toBe(404)
+    expect((await bob.post(`/api/v1/transactions/${tx}/unsettle`)).status).toBe(404)
+    expect(
+      (
+        await bob
+          .post(`/api/v1/installment-plans/${plan}/payoff`)
+          .send({ amountCents: 1, date: '2026-11-07' })
+      ).status,
+    ).toBe(404)
+    expect((await bob.post(`/api/v1/installment-plans/${plan}/cancel`)).status).toBe(404)
+    expect((await bob.get(`/api/v1/credit-cards/${card}/statements/2026-11`)).status).toBe(404)
+    expect((await bob.post(`/api/v1/credit-cards/${card}/statements/2026-11/pay`)).status).toBe(404)
+    expect((await bob.get(`/api/v1/payees/${aliceIds.payees}/suggestion`)).status).toBe(404)
+  })
+
+  it('o mês, o resumo e o totalizador do Bob não trazem nada da Alice', async () => {
+    const nov = await bob.get('/api/v1/months/2026-11')
+    expect(nov.body.transactions).toEqual([])
+    expect(nov.body.summary.expenseForecastCents).toBe(0)
+    const summary = await bob.get('/api/v1/installment-plans/summary')
+    expect(summary.body.payoffTotalCents).toBe(0)
+    // A Alice vê os dela (salário materializado + planejamento + parcela).
+    const alices = await alice.get('/api/v1/months/2026-11')
+    expect(alices.body.transactions.length).toBeGreaterThanOrEqual(2)
+  })
+
   it('Bob não consegue apontar para dados da Alice em referências', async () => {
     const card = await bob
       .post('/api/v1/credit-cards')
@@ -104,6 +177,7 @@ describe('isolamento entre usuários', () => {
     expect(payee.status).toBe(400)
 
     const template = await bob.post('/api/v1/recurring-templates').send({
+      type: 'income',
       description: 'X',
       amountCents: 100,
       dayOfMonth: 1,
@@ -111,6 +185,31 @@ describe('isolamento entre usuários', () => {
       accountId: aliceIds.accounts,
     })
     expect(template.status).toBe(400)
+
+    const base = {
+      type: 'expense',
+      nature: 'variable',
+      description: 'X',
+      amountCents: 100,
+      date: '2026-11-07',
+    }
+    for (const ref of [
+      { categoryId: aliceIds.categories },
+      { accountId: aliceIds.accounts },
+      { payeeId: aliceIds.payees },
+      { paymentMethod: 'credit', creditCardId: aliceIds['credit-cards'] },
+      { parentPlannedId: aliceIds.transactions },
+    ]) {
+      expect((await bob.post('/api/v1/transactions').send({ ...base, ...ref })).status).toBe(400)
+    }
+    const plan = await bob.post('/api/v1/installment-plans').send({
+      description: 'X',
+      creditCardId: aliceIds['credit-cards'],
+      purchaseDate: '2026-11-01',
+      totalCents: 300,
+      installmentsCount: 3,
+    })
+    expect(plan.status).toBe(400)
   })
 
   it('user_id enviado pelo cliente é ignorado', async () => {

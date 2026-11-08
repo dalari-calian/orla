@@ -3,6 +3,7 @@ import {
   updatePayeeRequestSchema,
   type ListResponse,
   type Payee,
+  type PayeeSuggestion,
 } from '@orla/contracts'
 import type { PrismaClient } from '@orla/db'
 import { Router } from 'express'
@@ -56,6 +57,27 @@ export function payeesRouter(prisma: PrismaClient): Router {
       orderBy: { name: 'asc' },
     })
     const body: ListResponse<Payee> = { data: rows.map(toPayee), nextCursor: null }
+    res.json(body)
+  })
+
+  /**
+   * RM-03: memória do estabelecimento — categoria, forma de pagamento, cartão e conta do
+   * último lançamento dele (ou a categoria padrão, se ainda não houver lançamento).
+   */
+  router.get('/payees/:id/suggestion', async (req, res) => {
+    const userId = userIdOf(req)
+    const payee = await findOwned(userId, paramId(req))
+    const last = await prisma.transaction.findFirst({
+      where: { userId, payeeId: payee.id, deletedAt: null, source: { not: 'template' } },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      select: { categoryId: true, paymentMethod: true, creditCardId: true, accountId: true },
+    })
+    const body: PayeeSuggestion = {
+      categoryId: last?.categoryId ?? payee.defaultCategoryId,
+      paymentMethod: (last?.paymentMethod ?? null) as PayeeSuggestion['paymentMethod'],
+      creditCardId: last?.creditCardId ?? null,
+      accountId: last?.accountId ?? null,
+    }
     res.json(body)
   })
 

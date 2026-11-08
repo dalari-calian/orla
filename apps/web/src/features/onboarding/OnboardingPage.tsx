@@ -6,21 +6,16 @@ import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { LogoMark } from '@/components/layout/Logo'
 import { Button } from '@/components/ui/Button'
-import { SelectField, TextField } from '@/components/ui/Field'
+import { TextField } from '@/components/ui/Field'
+import { SelectField } from '@/components/ui/Select'
 import { GroupedList, ListRow } from '@/components/ui/GroupedList'
 import { MoneyInput } from '@/components/ui/MoneyInput'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Sheet } from '@/components/ui/Sheet'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useToast } from '@/components/ui/Toast'
-import {
-  accounts,
-  categories,
-  creditCards,
-  useCreateIncomeTemplate,
-  useRecurringTemplates,
-  useUpdateSettings,
-} from '@/features/registrations/api'
+import { accounts, categories, creditCards, useUpdateSettings } from '@/features/registrations/api'
+import { useRecurringTemplateMutations, useRecurringTemplates } from '@/features/finances/api'
 import { AccountForm, CreditCardForm } from '@/features/registrations/forms'
 import {
   accountKindLabels,
@@ -236,7 +231,7 @@ function SalaryStep({ onNext }: { onNext: () => void }) {
   const templates = useRecurringTemplates()
   const accountList = accounts.useList()
   const categoryList = categories.useList()
-  const createTemplate = useCreateIncomeTemplate()
+  const createTemplate = useRecurringTemplateMutations().create
   const [amount, setAmount] = useState<number | null>(null)
   const [day, setDay] = useState('5')
   const [accountId, setAccountId] = useState('')
@@ -255,6 +250,7 @@ function SalaryStep({ onNext }: { onNext: () => void }) {
     setError(null)
     createTemplate.mutate(
       {
+        type: 'income',
         description: 'Salário',
         amountCents: amount,
         dayOfMonth,

@@ -4,12 +4,10 @@ import {
   creditCardSchema,
   listResponseSchema,
   payeeSchema,
-  recurringTemplateSchema,
   settingsResponseSchema,
   type CreateAccountRequest,
   type CreateCategoryRequest,
   type CreateCreditCardRequest,
-  type CreateIncomeTemplateRequest,
   type CreatePayeeRequest,
   type MeResponse,
   type UpdateAccountRequest,
@@ -107,27 +105,5 @@ export function useUpdateSettings() {
         me ? { ...me, onboardingCompleted: settings.onboardingCompleted } : me,
       )
     },
-  })
-}
-
-// ─── Modelos recorrentes (Fase 1: salário base do onboarding) ────────────────
-
-const templatesKey = ['recurring-templates'] as const
-
-export function useRecurringTemplates() {
-  return useQuery({
-    queryKey: templatesKey,
-    queryFn: async ({ signal }) =>
-      (await api.get('/recurring-templates', listResponseSchema(recurringTemplateSchema), signal))
-        .data,
-  })
-}
-
-export function useCreateIncomeTemplate() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: CreateIncomeTemplateRequest) =>
-      api.post('/recurring-templates', recurringTemplateSchema, input),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: templatesKey }),
   })
 }

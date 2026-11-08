@@ -59,7 +59,9 @@ Implementado na Fase 1 (schemas em `packages/contracts/src/registrations.ts` e `
 - `/categories`: `{ kind, name, parentId?, icon (catálogo do core), color, monthlyBudgetCents? }`; `GET ?kind=income|expense`. Só 1 nível de subcategoria, pai do mesmo tipo; `kind` não muda depois de criada. Nome único dentro do mesmo pai. Não exclui categoria com subcategorias (`409`); restore exige o pai ativo.
 - `/payees`: `{ name, defaultCategoryId? }`; `GET ?q=` busca por nome. Nome único sem diferenciar maiúsculas.
 - `/me/settings`: `GET` e `PATCH { savingsGoal?, cardCompetence?, theme?, hideValues?, onboardingCompleted? }`, com `savingsGoal = { mode: 'none' } | { mode: 'fixed', amountCents } | { mode: 'percent', percent: "20.5" }`.
-- `/recurring-templates` (subconjunto da Fase 1): `GET` e `POST { description, amountCents, dayOfMonth, startMonth: 'YYYY-MM', categoryId?, accountId? }`, que cria **receita fixa mensal** (salário base do onboarding). Editar, excluir e materializar nos meses vêm na Fase 2.
+- `/recurring-templates` (CRUD completo na Fase 2): `{ type, nature: fixed|planned, description, amountCents, categoryId?, accountId?, payeeId?, paymentMethod?, creditCardId?, frequency: monthly|yearly, monthOfYear? (1–12, obrigatório no anual), dayOfMonth, startMonth, endMonth?, isActive? }`.
+  - `PATCH` aceita `applyFromMonth` (padrão: mês atual). RF-13: muda só os lançamentos **previstos e não editados à mão** com competência ≥ esse mês. Se o modelo deixou de ocorrer num mês (fim, pausa, outro mês do ano), o previsto daquele mês sai.
+  - `DELETE ?removeFromMonth=YYYY-MM` (RF-14) também remove os previstos desse mês em diante. `restore` traz de volta o modelo e os lançamentos removidos junto.
 
 ### Finanças
 
@@ -78,6 +80,34 @@ Implementado na Fase 1 (schemas em `packages/contracts/src/registrations.ts` e `
 | GET    | `/credit-cards/:id/statements/:month`     | fatura                                                                        |
 | POST   | `/credit-cards/:id/statements/:month/pay` |                                                                               |
 | POST   | `/quick-entry`                            | texto livre → rascunho (RQ-01)                                                |
+
+Implementado na Fase 2 (schemas em `packages/contracts/src/finances.ts`; regras em `packages/core/src/finance`):
+
+- **Mês**
+  - `GET /months/:month` materializa os modelos ativos (RF-11, idempotente) e devolve `{ month, summary, settings: { savingsGoalCents, defaultSavingsGoal, notes }, transactions }`. `summary` segue a RF-51.
+  - `PATCH /months/:month/settings { savingsGoalCents?: number | null, notes? }` define a meta do mês; `null` volta à meta padrão.
+  - Mês malformado → `404`. Dashboard e projeção ficam para a Fase 3.
+- **Lançamentos**
+  - Rotas: `GET /transactions?month&type&nature&status&categoryId&cardId&accountId&payeeId&q&cursor&limit` (ordem: data desc; `nextCursor` = id do último) · `GET/PATCH/DELETE /transactions/:id` · `POST /transactions` · `POST /transactions/:id/settle { amountCents?, date? }` · `/unsettle` · `/restore`.
+  - Criar: `{ type, nature: fixed|variable|planned|extra, description, amountCents, date, competenceMonth?, status?, categoryId?, accountId?, payeeId?, paymentMethod?, creditCardId?, parentPlannedId?, tags?, notes? }`. Receita é `fixed|extra`; `installment` só via parcelamento. Crédito exige `creditCardId`.
+  - Competência (RF-02/03): a informada; senão a da fatura, no crédito (RF-30); senão o mês da data. No `PATCH` de lançamento manual, mudar data, forma ou cartão recalcula.
+  - Status padrão (RF-24): gasto do dia e receita extra nascem `settled`. Fixa, planejamento e **qualquer compra no crédito** nascem `forecast`; a compra vira `settled` quando a fatura é paga.
+  - Editar um lançamento gerado por modelo ou parcelamento marca `isOverride` (RF-12/47) e não permite mudar tipo nem natureza.
+  - `parentPlannedId` (RF-22): precisa ser um planejamento de despesa do usuário; o gasto vai para a competência do planejamento. Excluir o planejamento desvincula os gastos. Planejamento com gastos não muda de natureza (`409`).
+  - Parcela não pode ser excluída sozinha (`409`): use editar, quitar ou cancelar o parcelamento.
+- **Parcelamentos**
+  - Rotas: `GET /installment-plans?status=active|finished|all` (traz `indicators`, RF-44, no mês atual) · `GET /installment-plans/summary` → `{ payoffTotalCents, activeCount, byCard, monthly[12], freeFromMonth }` (RF-45) · `GET /installment-plans/:id` → `{ plan, installments }` · `POST` · `PATCH` · `DELETE` · `/restore` · `POST /:id/payoff { amountCents, date, competenceMonth? }` (RF-46) · `POST /:id/cancel` (RF-48).
+  - Criar (RF-40..43): `{ description, paymentMethod (padrão credit), creditCardId?, accountId?, payeeId?, categoryId?, purchaseDate, totalCents | installmentCents, installmentsCount (1–480), firstCompetenceMonth?, currentInstallment?, notes? }`.
+  - 1ª competência: a informada; senão "mês atual − (k − 1)" com "já estou na parcela k"; senão a fatura da compra.
+  - Data de cada parcela: o vencimento da fatura, no crédito; senão o dia da compra em cada mês.
+  - `PATCH` com total, nº de parcelas ou 1ª competência regera só as parcelas previstas não editadas (RF-47; só parcelamentos ativos). Descrição, categoria e cartão também vão só para essas parcelas.
+  - Quitação: apaga as parcelas previstas, cria um lançamento realizado (`installmentNumber: null`) e guarda `payoffDiscountCents`.
+  - Excluir leva as parcelas junto; `restore` traz as duas coisas de volta.
+- **Fatura**
+  - `GET /credit-cards/:id/statements/:month` → `{ closingDate, dueDate, status: open|closed|paid, totalCents, settledCents, futureTotalCents, transactions }` (RF-31/32).
+  - `POST .../pay` marca todos os lançamentos da fatura como realizados.
+- **Estabelecimento** — `GET /payees/:id/suggestion` → `{ categoryId, paymentMethod, creditCardId, accountId }`, copiados do último lançamento (RM-03).
+- Erros de regra do core (ex.: parcela < R$ 0,01, total menor que o já pago) → `400 VALIDATION`.
 
 ### Carteira
 

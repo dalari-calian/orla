@@ -232,6 +232,7 @@ describe('configurações e onboarding', () => {
       (category: { name: string }) => category.name === 'Salário',
     )
     const res = await agent.post('/api/v1/recurring-templates').send({
+      type: 'income',
       description: 'Salário',
       amountCents: 600000,
       dayOfMonth: 5,
@@ -250,6 +251,7 @@ describe('configurações e onboarding', () => {
 
     const expenseCategory = (await agent.get('/api/v1/categories?kind=expense')).body.data[0]
     const wrongKind = await agent.post('/api/v1/recurring-templates').send({
+      type: 'income',
       description: 'X',
       amountCents: 1,
       dayOfMonth: 5,
@@ -258,9 +260,13 @@ describe('configurações e onboarding', () => {
     })
     expect(wrongKind.status).toBe(400)
 
-    const zero = await agent
-      .post('/api/v1/recurring-templates')
-      .send({ description: 'X', amountCents: 0, dayOfMonth: 5, startMonth: '2026-11' })
+    const zero = await agent.post('/api/v1/recurring-templates').send({
+      type: 'income',
+      description: 'X',
+      amountCents: 0,
+      dayOfMonth: 5,
+      startMonth: '2026-11',
+    })
     expect(zero.status).toBe(400)
   })
 })

@@ -50,7 +50,51 @@ Paleta de classes/categorias (gráficos): `#007AFF #34C759 #FF9500 #AF52DE #FF2D
 - Raio: cartão 20px, campos/botões 12px, chips 999px, sheet 28px no topo.
 - Sombra: só `0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04)` em cartões flutuantes; no escuro, sem sombra (usar `--surface`).
 - Blur: tab bar e cabeçalho com `backdrop-filter: saturate(180%) blur(20px)` e fundo `color-mix(--surface 72%, transparent)`.
-- Movimento: 200–300 ms, curva `cubic-bezier(.32,.72,0,1)` (iOS sheet). Números do herói fazem _count-up_ curto. Respeitar `prefers-reduced-motion`.
+- Movimento: 200–300 ms, curva `cubic-bezier(.32,.72,0,1)` (iOS sheet). Números do herói fazem _count-up_ curto. Respeitar `prefers-reduced-motion`. Regras completas em **Movimento e microinterações** abaixo.
+
+## Movimento e microinterações
+
+Toda ação do usuário tem uma resposta visual: o app deve parecer vivo, mas **calmo**. A animação explica o que aconteceu (de onde veio, para onde foi, o que mudou); nunca é enfeite. Na dúvida, menos.
+
+### Princípios
+
+1. **Rápido e discreto.** 150–300 ms para quase tudo; até 500 ms só para gráficos e o _count-up_. Deslocamentos pequenos (4–12 px), sem rotações, quiques fortes ou piscadas.
+2. **Uma curva só:** `--ease-ios` (`cubic-bezier(.32,.72,0,1)`) para entradas e transições. Nada de `linear` em movimento.
+3. **Só `transform` e `opacity`** (e `height` com `interpolate-size` nos colapsáveis). Nunca animar `width`/`top`/sombras pesadas — 60 fps no celular.
+4. **Nada de animação na carga repetida.** A página entra suave uma vez; itens que já estavam na tela não reanimam a cada refetch.
+5. **`prefers-reduced-motion: reduce` desliga tudo** (regra global em `globals.css`); a informação continua toda lá.
+6. **Feedback antes da resposta do servidor.** Toque/clique responde na hora (estado pressionado, spinner no botão); o resultado anima quando chega.
+
+### Catálogo (utilitários em `apps/web/src/styles/globals.css` e `lib/motion.ts`)
+
+| Situação                                        | Efeito                                                      | Implementação                          |
+| ----------------------------------------------- | ----------------------------------------------------------- | -------------------------------------- |
+| Trocar de tela                                  | conteúdo entra com fade + sobe 8 px (260 ms)                | `animate-enter` no `AppShell`          |
+| Botões, chips, cartões clicáveis, botão +       | encolhe levemente ao pressionar (`scale .97`)               | `press` (utilitário)                   |
+| Linhas de lista                                 | fundo `surface-2` ao tocar (sem escala)                     | `hover:` / `active:bg-surface-2`       |
+| Dados chegando (skeleton → conteúdo, troca de mês) | fade-in de 180 ms                                         | `animate-fade-in` com `key` nos dados  |
+| Número herói (sobra, para quitar, fatura)       | _count-up_ de 450 ms do valor anterior para o novo          | `useCountUp` / `<AnimatedMoney>`       |
+| Marcar pago/recebido                            | o check "salta" (scale .6 → 1.1 → 1, 240 ms)                | `animate-pop`                          |
+| Barras de gráfico                               | crescem da base, em cascata de 30 ms por barra (500 ms)     | `animate-grow-y` + `animationDelay`    |
+| Barra de progresso                              | preenche da esquerda ao montar e anima ao mudar             | `animate-grow-x` + `transition-[width]`|
+| Sheet / dialog                                  | sobe da base (mobile) ou aparece com fade (desktop); fecha na hora | classes do `Sheet`              |
+| Toast                                           | sobe 16 px com fade                                         | `animate-toast-in`                     |
+| Seções colapsáveis (`<details>`)                | altura anima ao abrir/fechar; chevron gira                  | `::details-content` + `interpolate-size` |
+| Segmented control                               | o fundo do item escolhido desliza até o novo (300 ms)       | indicador com `translateX`             |
+| Chip selecionado                                | cor e fundo com transição de 200 ms                         | `transition-colors`                    |
+| Trocar de aba no sheet de lançamento            | conteúdo desliza do lado da aba escolhida (56 px + fade, 320 ms) | `animate-slide-from-right/left`  |
+| Abrir seletor / calendário de mês               | o painel "desdobra" colado no campo (240 ms)                | `.attached-panel` + `@starting-style` |
+
+**Barra de rolagem:** fina e translúcida (estilo iOS), sem trilho nem setas, afastada das pontas para não quadrar cantos arredondados — global em `globals.css`. No `Sheet`, só o conteúdo rola; o título fica fixo.
+
+**Não fazer:** animar a lista inteira item a item a cada render, parallax, confete, contadores em todos os números (só no herói), animações em loop (exceto skeleton e spinner), transições acima de 500 ms.
+
+### Checklist de tela nova
+
+- [ ] Ações clicáveis com `press` (ou fundo ao tocar, em linhas).
+- [ ] Conteúdo carregado entra com `animate-fade-in` (sem reanimar em refetch).
+- [ ] Número herói com `<AnimatedMoney>`.
+- [ ] Testado com `prefers-reduced-motion` ligado (DevTools › Rendering).
 
 ## Componentes base (`apps/web/src/components/ui`)
 
@@ -60,11 +104,13 @@ Paleta de classes/categorias (gráficos): `#007AFF #34C759 #FF9500 #AF52DE #FF2D
 | `TabBar`                               | 5 itens: Início · Finanças · **+** · Carteira · Mais (Aporte, Balanço, Config) — o + é o botão central de lançar |
 | `Sidebar`                              | desktop ≥1024px: logo, navegação, seletor de mês, usuário                                                        |
 | `LargeTitle`                           | título estilo iOS que encolhe no scroll                                                                          |
-| `MonthSwitcher`                        | ◀ Novembro 2026 ▶, swipe lateral, toque abre seletor                                                             |
+| `MonthSwitcher`                        | ◀ Novembro 2026 ▶, swipe lateral, toque abre a grade de meses (`MonthGrid`)                                      |
+| `MonthField`                           | campo de mês ◀ mês ▶ + grade de meses colada; modo "Automático" mostra o mês calculado (nunca `type="month"`)    |
+| `SelectField`                          | seletor próprio: a lista sai colada no campo, mesma cor, cantos arredondados só nas pontas; teclado completo   |
 | `Card`, `CardHeader`                   | superfície padrão                                                                                                |
 | `GroupedList`, `ListRow`               | lista inset agrupada (ícone em círculo, título, subtítulo, valor à direita, chevron); swipe actions no mobile    |
 | `Sheet`                                | bottom sheet no mobile (arrastável, Vaul), dialog central no desktop                                             |
-| `MoneyInput`                           | máscara BRL, teclado `inputmode="decimal"`, valor grande                                                         |
+| `MoneyInput`                           | máscara BRL, teclado `inputmode="decimal"`, valor grande |
 | `SegmentedControl`                     | forma de pagamento, tipo, período                                                                                |
 | `Chip` / `ChipGroup`                   | categorias, filtros                                                                                              |
 | `ProgressBar`, `ProgressRing`          | meta, parcelas, orçamento                                                                                        |

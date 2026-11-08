@@ -51,6 +51,70 @@
 /* Breakpoints do doc 09: xl = 1440px. */
 @theme {
   --breakpoint-xl: 90rem;
+
+  /*
+   * Movimento (doc 09 › Movimento e microinterações): rápido, discreto, só transform/opacity.
+   * Viram utilitários: animate-enter, animate-fade-in, animate-pop, animate-grow-y...
+   */
+  --animate-enter: enter 260ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  --animate-fade-in: fade-in 180ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  --animate-pop: pop 240ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  --animate-grow-y: grow-y 500ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  --animate-grow-x: grow-x 500ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  --animate-toast-in: toast-in 260ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  --animate-slide-from-right: slide-from-right 320ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  --animate-slide-from-left: slide-from-left 320ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes pop {
+    0% {
+      transform: scale(0.6);
+    }
+    60% {
+      transform: scale(1.1);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes grow-y {
+    from {
+      transform: scaleY(0);
+    }
+  }
+  @keyframes grow-x {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @keyframes slide-from-right {
+    from {
+      opacity: 0;
+      transform: translateX(56px);
+    }
+  }
+  @keyframes slide-from-left {
+    from {
+      opacity: 0;
+      transform: translateX(-56px);
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
 }
 
 @layer base {
@@ -69,6 +133,58 @@
     outline-offset: 2px;
   }
 
+  /* Deixa animar height: auto (seções colapsáveis). Navegadores sem suporte só abrem na hora. */
+  :root {
+    interpolate-size: allow-keywords;
+  }
+
+  details::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition:
+      block-size 260ms var(--ease-ios),
+      content-visibility 260ms allow-discrete;
+  }
+
+  details[open]::details-content {
+    block-size: auto;
+  }
+
+  /*
+   * Barra de rolagem minimalista (estilo iOS): só um "comprimido" fino e translúcido,
+   * sem trilho nem setas, afastado das pontas para não quadrar cantos arredondados.
+   */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-track {
+    margin-block: 14px;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--text) 22%, transparent);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text) 38%, transparent);
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+  /* Firefox não tem os pseudo-elementos acima. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--text) 25%, transparent) transparent;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -76,6 +192,58 @@
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+@layer components {
+  /*
+   * Painel "colado" no campo (seletor e calendário de mês): mesma cor do campo, sem corte
+   * entre os dois, cantos arredondados só na ponta. Abre "desdobrando" a partir do campo.
+   */
+  .attached-panel {
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 18px 32px -14px rgb(0 0 0 / 0.32);
+    clip-path: inset(0 -48px -48px -48px);
+    opacity: 1;
+    transition:
+      clip-path 240ms var(--ease-ios),
+      opacity 160ms var(--ease-ios);
+  }
+  .attached-panel[data-placement='above'] {
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -18px 32px -14px rgb(0 0 0 / 0.32);
+    clip-path: inset(-48px -48px 0 -48px);
+  }
+  .floating-panel {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 180ms var(--ease-ios),
+      transform 240ms var(--ease-ios);
+  }
+
+  @starting-style {
+    .attached-panel:popover-open {
+      clip-path: inset(0 0 100% 0);
+      opacity: 0;
+    }
+    .attached-panel[data-placement='above']:popover-open {
+      clip-path: inset(100% 0 0 0);
+    }
+    .floating-panel:popover-open {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.98);
+    }
+  }
+}
+
+/* Resposta ao toque em botões, chips e cartões clicáveis (doc 09 › Movimento). */
+@utility press {
+  transition-property: transform, opacity, background-color, color;
+  transition-duration: 200ms;
+  transition-timing-function: var(--ease-ios);
+  &:active:not(:disabled) {
+    transform: scale(0.97);
   }
 }
 

@@ -71,6 +71,7 @@ export function MoneyInput({
           inputMode="decimal"
           autoComplete="off"
           autoFocus={autoFocus}
+          data-autofocus={autoFocus ? true : undefined}
           placeholder={placeholder}
           value={text}
           aria-invalid={error || invalid ? true : undefined}

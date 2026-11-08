@@ -32,6 +32,9 @@ model User {
   categories         Category[]
   payees             Payee[]
   recurringTemplates RecurringTemplate[]
+  installmentPlans   InstallmentPlan[]
+  transactions       Transaction[]
+  monthSettings      MonthSettings[]
 
   @@map("users")
 }
@@ -95,6 +98,8 @@ model Account {
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   creditCards        CreditCard[]
   recurringTemplates RecurringTemplate[]
+  installmentPlans   InstallmentPlan[]
+  transactions       Transaction[]
 
   @@index([userId])
   @@map("accounts")
@@ -116,6 +121,8 @@ model CreditCard {
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   account            Account             @relation(fields: [accountId], references: [id])
   recurringTemplates RecurringTemplate[]
+  installmentPlans   InstallmentPlan[]
+  transactions       Transaction[]
 
   @@index([userId])
   @@map("credit_cards")
@@ -143,6 +150,8 @@ model Category {
   children           Category[]          @relation("CategoryTree")
   defaultForPayees   Payee[]
   recurringTemplates RecurringTemplate[]
+  installmentPlans   InstallmentPlan[]
+  transactions       Transaction[]
 
   @@index([userId, kind])
   @@map("categories")
@@ -161,6 +170,8 @@ model Payee {
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   defaultCategory    Category?           @relation(fields: [defaultCategoryId], references: [id])
   recurringTemplates RecurringTemplate[]
+  installmentPlans   InstallmentPlan[]
+  transactions       Transaction[]
 
   // Nome único por usuário, sem diferenciar maiúsculas: índice parcial em lower(name) no SQL.
   @@index([userId])
@@ -168,7 +179,7 @@ model Payee {
 }
 
 /// Modelos que projetam lançamentos nos meses (salário base, contas fixas).
-/// Na Fase 1 só são criados pelo onboarding (salário base); a materialização é da Fase 2.
+/// Cada modelo gera um lançamento previsto por mês em que ocorre (RF-11).
 model RecurringTemplate {
   id            String    @id @default(uuid(7)) @db.Uuid
   userId        String    @map("user_id") @db.Uuid
@@ -201,6 +212,120 @@ model RecurringTemplate {
   payee      Payee?      @relation(fields: [payeeId], references: [id])
   creditCard CreditCard? @relation(fields: [creditCardId], references: [id])
 
+  transactions Transaction[]
+
   @@index([userId])
   @@map("recurring_templates")
+}
+
+// ─── Finanças (Fase 2) ──────────────────────────────────────────────────────
+
+/// Uma compra parcelada (ex.: Nintendo Switch 12×). As parcelas são transactions.
+model InstallmentPlan {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  description          String
+  payeeId              String?   @map("payee_id") @db.Uuid
+  categoryId           String?   @map("category_id") @db.Uuid
+  /// null se parcelado em boleto/carnê.
+  creditCardId         String?   @map("credit_card_id") @db.Uuid
+  accountId            String?   @map("account_id") @db.Uuid
+  /// pix · debit · credit · cash · boleto · transfer · other
+  paymentMethod        String    @map("payment_method")
+  purchaseDate         DateTime  @map("purchase_date") @db.Date
+  totalCents           BigInt    @map("total_cents")
+  installmentsCount    Int       @map("installments_count") @db.SmallInt
+  firstCompetenceMonth DateTime  @map("first_competence_month") @db.Date
+  /// active · paid_off · canceled
+  status               String    @default("active")
+  paidOffAt            DateTime? @map("paid_off_at") @db.Date
+  /// Desconto obtido na quitação antecipada (RF-46): falta pagar − valor pago.
+  payoffDiscountCents  BigInt?   @map("payoff_discount_cents")
+  notes                String?
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payee        Payee?        @relation(fields: [payeeId], references: [id])
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  creditCard   CreditCard?   @relation(fields: [creditCardId], references: [id])
+  account      Account?      @relation(fields: [accountId], references: [id])
+  transactions Transaction[]
+
+  @@index([userId, status])
+  @@map("installment_plans")
+}
+
+/// Toda linha do mês: receitas, despesas, parcelas, planejamentos.
+model Transaction {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  /// income · expense
+  type                String
+  /// fixed · variable · planned · installment · extra
+  nature              String
+  /// forecast · settled
+  status              String
+  description         String
+  /// Sempre positivo; o sinal vem do tipo.
+  amountCents         BigInt    @map("amount_cents")
+  competenceMonth     DateTime  @map("competence_month") @db.Date
+  date                DateTime  @db.Date
+  categoryId          String?   @map("category_id") @db.Uuid
+  accountId           String?   @map("account_id") @db.Uuid
+  payeeId             String?   @map("payee_id") @db.Uuid
+  /// pix · debit · credit · cash · boleto · transfer · other
+  paymentMethod       String?   @map("payment_method")
+  creditCardId        String?   @map("credit_card_id") @db.Uuid
+  recurringTemplateId String?   @map("recurring_template_id") @db.Uuid
+  installmentPlanId   String?   @map("installment_plan_id") @db.Uuid
+  /// 1..N; null na transação de quitação antecipada.
+  installmentNumber   Int?      @map("installment_number") @db.SmallInt
+  /// Gasto vinculado a um planejamento (RF-22).
+  parentPlannedId     String?   @map("parent_planned_id") @db.Uuid
+  /// Editado à mão depois de gerado por modelo/parcelamento (RF-12, RF-47).
+  isOverride          Boolean   @default(false) @map("is_override")
+  tags                String[]  @default([])
+  notes               String?
+  /// manual · import · template · plan · bot
+  source              String    @default("manual")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category          Category?          @relation(fields: [categoryId], references: [id])
+  account           Account?           @relation(fields: [accountId], references: [id])
+  payee             Payee?             @relation(fields: [payeeId], references: [id])
+  creditCard        CreditCard?        @relation(fields: [creditCardId], references: [id])
+  recurringTemplate RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id])
+  installmentPlan   InstallmentPlan?   @relation(fields: [installmentPlanId], references: [id])
+  parentPlanned     Transaction?       @relation("PlannedChildren", fields: [parentPlannedId], references: [id])
+  plannedChildren   Transaction[]      @relation("PlannedChildren")
+
+  // Índices únicos (modelo × mês, parcelamento × parcela) e CHECKs ficam no SQL da migration.
+  @@index([userId, competenceMonth])
+  @@index([userId, installmentPlanId])
+  @@index([userId, creditCardId, competenceMonth])
+  @@index([userId, payeeId])
+  @@index([parentPlannedId])
+  @@map("transactions")
+}
+
+/// Ajustes de um mês: meta de investimento do mês (RF-50) e observações.
+model MonthSettings {
+  userId           String    @map("user_id") @db.Uuid
+  competenceMonth  DateTime  @map("competence_month") @db.Date
+  /// null = usa a meta padrão do usuário.
+  savingsGoalCents BigInt?   @map("savings_goal_cents")
+  notes            String?
+  closedAt         DateTime? @map("closed_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, competenceMonth])
+  @@map("month_settings")
 }

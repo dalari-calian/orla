@@ -59,5 +59,6 @@ pnpm lint && pnpm typecheck
 - `pnpm lint`, `pnpm typecheck` e `pnpm test` passando.
 - Regra nova no core → teste cobrindo caso feliz, bordas (arredondamento, mês de virada, parcela única) e erro.
 - Tela nova → funciona em 375px e 1440px, tema claro e escuro, estados de carregando / vazio / erro.
+- Tela/ação nova → microinterações do `docs/09-design-system.md` › Movimento (resposta ao toque, entrada suave, número herói animado), discretas e desligadas com `prefers-reduced-motion`.
 - Endpoint novo → validado com o schema Zod de `packages/contracts`, filtrado por `user_id`, documentado em `docs/11-api.md`.
 - Migration gerada e versionada (nunca edite migration já aplicada).

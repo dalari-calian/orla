@@ -1,6 +1,7 @@
 import type { SignupMode } from '@orla/contracts'
 import type { PrismaClient } from '@orla/db'
 import express, { type Express } from 'express'
+import { createClock } from './lib/clock.ts'
 import { RateLimiter } from './lib/rate-limit.ts'
 import { requireAuth } from './middleware/auth.ts'
 import { errorHandler, notFoundHandler } from './middleware/error-handler.ts'
@@ -8,12 +9,16 @@ import { originCheck } from './middleware/origin-check.ts'
 import { securityHeaders } from './middleware/security-headers.ts'
 import { accountsRouter } from './routes/accounts.ts'
 import { authRouter } from './routes/auth.ts'
+import { cardStatementsRouter } from './routes/card-statements.ts'
 import { categoriesRouter } from './routes/categories.ts'
 import { creditCardsRouter } from './routes/credit-cards.ts'
 import { healthRouter } from './routes/health.ts'
+import { installmentPlansRouter } from './routes/installment-plans.ts'
+import { monthsRouter } from './routes/months.ts'
 import { payeesRouter } from './routes/payees.ts'
 import { recurringTemplatesRouter } from './routes/recurring-templates.ts'
 import { settingsRouter } from './routes/settings.ts'
+import { transactionsRouter } from './routes/transactions.ts'
 import { AuthService } from './services/auth.ts'
 
 export interface AppDeps {
@@ -31,11 +36,14 @@ export interface AppDeps {
   inviteCode: string | undefined
   /** Tentativas por minuto (RNF-22). Padrão: 5 de login por IP+usuário e 5 cadastros por IP. */
   rateLimits?: { loginPerMinute?: number; signupPerMinute?: number }
+  /** Relógio (os testes fixam a data). Padrão: agora. */
+  now?: () => Date
 }
 
 /** Monta o app Express. Dependências injetadas para facilitar testes. */
 export function createApp(deps: AppDeps): Express {
   const { prisma } = deps
+  const clock = createClock(deps.timezone, deps.now)
   const auth = new AuthService(prisma, {
     jwtSecret: deps.jwtSecret,
     refreshPepper: deps.refreshPepper,
@@ -70,7 +78,11 @@ export function createApp(deps: AppDeps): Express {
   authed.use(creditCardsRouter(prisma))
   authed.use(categoriesRouter(prisma))
   authed.use(payeesRouter(prisma))
-  authed.use(recurringTemplatesRouter(prisma))
+  authed.use(recurringTemplatesRouter(prisma, clock))
+  authed.use(cardStatementsRouter(prisma, clock))
+  authed.use(transactionsRouter(prisma))
+  authed.use(monthsRouter(prisma))
+  authed.use(installmentPlansRouter(prisma, clock))
   v1.use(authed)
 
   app.use('/api/v1', v1)

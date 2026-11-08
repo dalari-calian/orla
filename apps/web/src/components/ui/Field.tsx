@@ -1,11 +1,4 @@
-import {
-  forwardRef,
-  useId,
-  type InputHTMLAttributes,
-  type ReactNode,
-  type SelectHTMLAttributes,
-} from 'react'
-import { ChevronDown } from 'lucide-react'
+import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 /** Classes de um campo de texto: ≥16px para o iOS não dar zoom (RNF-12). */
@@ -70,40 +63,6 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
           {...props}
         />
         {trailing && <div className="absolute inset-y-0 right-1 flex items-center">{trailing}</div>}
-      </div>
-    </FieldShell>
-  )
-})
-
-type SelectFieldProps = SelectHTMLAttributes<HTMLSelectElement> & {
-  label: string
-  error?: string | undefined
-  hint?: ReactNode
-}
-
-/** Select nativo (no celular abre o seletor do sistema, que é o melhor UX). */
-export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function SelectField(
-  { label, error, hint, className, id, children, ...props },
-  ref,
-) {
-  const generated = useId()
-  const selectId = id ?? generated
-  return (
-    <FieldShell label={label} error={error} hint={hint} htmlFor={selectId} className={className}>
-      <div className="relative">
-        <select
-          ref={ref}
-          id={selectId}
-          aria-invalid={error ? true : undefined}
-          className={cn(inputClass, 'appearance-none pr-10')}
-          {...props}
-        >
-          {children}
-        </select>
-        <ChevronDown
-          className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-text-2"
-          aria-hidden
-        />
       </div>
     </FieldShell>
   )

@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={toast.id}
               role={toast.tone === 'error' ? 'alert' : 'status'}
-              className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-field bg-text px-4 py-3 text-subhead text-bg shadow-card"
+              className="pointer-events-auto flex w-full max-w-sm animate-toast-in items-center gap-3 rounded-field bg-text px-4 py-3 text-subhead text-bg shadow-card"
             >
               <Icon
                 className={cn(

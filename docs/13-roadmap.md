@@ -7,6 +7,8 @@ Implementar **uma fase por vez**. Em cada fase: plano → implementação → te
 
 ATENÇÃO: Os testes eu vou fazendo de forma manual, então pode desconiderar a parte de fazer o debloy web e etc, primeiro vou testando as alterações rodando a aplicação local mesmo.
 
+**Em todas as fases (a partir da 2):** toda tela e ação nova segue o catálogo de **Movimento e microinterações** do `docs/09-design-system.md` — resposta imediata ao toque, entrada suave do conteúdo, número herói com _count-up_, check animado ao pagar — sempre discreto (150–300 ms) e desligado com `prefers-reduced-motion`. Faz parte do aceite visual de cada fase.
+
 ## Fase 0 — Fundação (1 sessão)
 
 - Monorepo pnpm + Turborepo, `apps/web`, `apps/api`, `packages/{core,contracts,db,config}`.

@@ -1,13 +1,11 @@
 import { CATEGORY_ICONS } from '@orla/core'
 import { z } from 'zod'
 import {
-  competenceMonthSchema,
   dayOfMonthSchema,
   hexColorSchema,
   idSchema,
   nameSchema,
   nonNegativeCentsSchema,
-  positiveCentsSchema,
   timestampsSchema,
 } from './common.ts'
 
@@ -117,7 +115,7 @@ export type CreatePayeeRequest = z.infer<typeof createPayeeRequestSchema>
 export const updatePayeeRequestSchema = createPayeeRequestSchema.partial()
 export type UpdatePayeeRequest = z.infer<typeof updatePayeeRequestSchema>
 
-// ─── Modelos recorrentes (Fase 1: só o salário base do onboarding) ───────────
+// ─── Forma de pagamento ──────────────────────────────────────────────────────
 
 export const paymentMethodSchema = z.enum([
   'pix',
@@ -128,31 +126,3 @@ export const paymentMethodSchema = z.enum([
   'transfer',
   'other',
 ])
-
-export const recurringTemplateSchema = z.object({
-  id: idSchema,
-  type: categoryKindSchema,
-  nature: z.enum(['fixed', 'planned']),
-  description: z.string(),
-  amountCents: z.number().int(),
-  categoryId: idSchema.nullable(),
-  accountId: idSchema.nullable(),
-  frequency: z.enum(['monthly', 'yearly']),
-  dayOfMonth: z.number().int(),
-  startMonth: competenceMonthSchema,
-  endMonth: competenceMonthSchema.nullable(),
-  isActive: z.boolean(),
-  ...timestampsSchema,
-})
-export type RecurringTemplate = z.infer<typeof recurringTemplateSchema>
-
-/** Fase 1: cria receitas fixas mensais (salário base). O CRUD completo vem na Fase 2. */
-export const createIncomeTemplateRequestSchema = z.object({
-  description: nameSchema(60),
-  amountCents: positiveCentsSchema,
-  dayOfMonth: dayOfMonthSchema,
-  startMonth: competenceMonthSchema,
-  categoryId: idSchema.nullable().optional(),
-  accountId: idSchema.nullable().optional(),
-})
-export type CreateIncomeTemplateRequest = z.infer<typeof createIncomeTemplateRequestSchema>

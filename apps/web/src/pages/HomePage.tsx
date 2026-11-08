@@ -1,10 +1,15 @@
-import { formatBRLParts } from '@orla/core/money'
+import { currentCompetenceMonth } from '@orla/core'
+import { formatBRL, formatBRLParts } from '@orla/core/money'
 import { CircleCheck } from 'lucide-react'
+import { Link } from 'react-router'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { SystemStatus } from '@/components/SystemStatus'
 import { Card } from '@/components/ui/Card'
 import { GroupedList, ListRow } from '@/components/ui/GroupedList'
 import { useMe } from '@/features/auth/api'
+import { useMonth } from '@/features/finances/api'
+import { cn } from '@/lib/cn'
+import { useCountUp } from '@/lib/motion'
 import { formatMonthYear } from '@/lib/dates'
 
 const roadmap = [
@@ -19,12 +24,15 @@ const roadmap = [
   { phase: 8, title: 'Notícias e polimento', detail: 'Notícias, ocultar valores, E2E' },
 ]
 
-const CURRENT_PHASE = 1
+const CURRENT_PHASE = 2
 
 function HeroAmount({ cents }: { cents: number }) {
-  const parts = formatBRLParts(cents)
+  const parts = formatBRLParts(useCountUp(cents))
   return (
-    <p className="text-[44px] leading-none font-semibold tracking-tight tabular lg:text-5xl">
+    <p
+      aria-label={formatBRL(cents)}
+      className="text-[44px] leading-none font-semibold tracking-tight tabular lg:text-5xl"
+    >
       {parts.sign}
       <span className="mr-1 text-title-2 font-medium text-text-2">{parts.symbol}</span>
       {parts.integer}
@@ -36,6 +44,8 @@ function HeroAmount({ cents }: { cents: number }) {
 export function HomePage() {
   const me = useMe()
   const firstName = (me.data?.displayName || me.data?.username || '').split(' ')[0]
+  const month = useMonth(currentCompetenceMonth())
+  const summary = month.data?.summary
   return (
     <>
       <PageHeader
@@ -46,12 +56,27 @@ export function HomePage() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         <Card className="md:col-span-2 xl:col-span-2">
           <p className="text-subhead text-text-2">Sobra prevista do mês</p>
-          <div className="mt-2">
-            <HeroAmount cents={0} />
+          <div
+            className={cn('mt-2', summary && summary.projectedSurplusCents < 0 && 'text-negative')}
+          >
+            <HeroAmount cents={summary?.projectedSurplusCents ?? 0} />
           </div>
-          <p className="mt-3 text-footnote text-text-2">
-            Os valores aparecem aqui quando os lançamentos chegarem (Fase 2).
-          </p>
+          {summary ? (
+            <p className="mt-3 text-footnote text-text-2 tabular">
+              Entradas {formatBRL(summary.incomeForecastCents)} · Saídas{' '}
+              {formatBRL(summary.expenseForecastCents)} · Meta {formatBRL(summary.savingsGoalCents)}
+            </p>
+          ) : (
+            <p className="mt-3 text-footnote text-text-2">
+              {month.isError ? 'Não foi possível carregar o mês.' : 'Carregando o mês…'}
+            </p>
+          )}
+          <Link
+            to="/financas"
+            className="mt-3 inline-flex min-h-11 items-center text-subhead font-medium text-accent"
+          >
+            Ver o mês em Finanças
+          </Link>
         </Card>
 
         <SystemStatus />

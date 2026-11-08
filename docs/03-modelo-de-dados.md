@@ -254,4 +254,11 @@ Derivado de `balance_items` + `quotes_cache`: **preço máximo observado, mínim
 - [x] **Parse de valores digitados (`parseBRL`, Fase 0):** com vírgula, ela é o separador decimal e os pontos são de milhar. Sem vírgula, o ponto é ambíguo: `1.500` (grupos de 3 dígitos) = R$ 1.500,00; `10.5` / `10.50` (1–2 casas) = R$ 10,50. Mais de 2 casas decimais (`12,345`) é **rejeitado**, não arredondado. Aceita `R$`, espaços, `-10`, `(10)`, `10-` e o sinal `−` (U+2212).
 - [x] **Fase 0:** a migration inicial cria só `users` e `sessions` (base da auth da Fase 1); o seed cria o usuário `demo` / senha `orla1234`.
 - [x] **Fase 1:** `user_settings` ganhou `onboarding_completed_at` (o onboarding aparece até ser concluído ou pulado). `recurring_templates` foi criada já completa, mas na Fase 1 só recebe o salário base do onboarding. Unicidade sem diferenciar maiúsculas, ignorando excluídos (índices parciais em `lower(name)`): `accounts` e `payees` por usuário; `categories` por usuário + tipo + pai. Contas com cartão ativo e categorias com subcategorias não podem ser excluídas (`409`).
+- [x] **Fase 2:**
+  - `installment_plans` ganhou `account_id` (boleto/carnê) e `payoff_discount_cents` (RF-46). A quitação é um `transaction` realizado, com `installment_plan_id` preenchido e `installment_number = null`.
+  - O índice único (modelo, mês) **não** ignora excluídos: um lançamento gerado que o usuário apagou não volta ao reabrir o mês.
+  - O gasto vinculado a um planejamento fica na competência do planejamento.
+  - Compra no crédito nasce `forecast`, porque o dinheiro só sai ao pagar a fatura.
+  - Editar um modelo "a partir de X" não mexe em lançamentos já realizados.
+  - Meses ainda não abertos são materializados com os valores atuais do modelo. Isso vale também para um mês passado aberto pela primeira vez depois de uma edição.
 - [x] **Ícones de categoria:** lista fechada de nomes do lucide em `packages/core/src/finance/catalog.ts` (`CATEGORY_ICONS`), validada na API.

@@ -23,7 +23,7 @@ export const hexColorSchema = z.string().refine(isHexColor, 'Cor inválida (use 
 /** Mês de competência `YYYY-MM`. */
 export const competenceMonthSchema = z
   .string()
-  .refine(isCompetenceMonth, 'Mês inválido (use AAAA-MM)')
+  .refine((value): boolean => isCompetenceMonth(value), 'Mês inválido (use AAAA-MM)')
 
 /** Texto curto obrigatório, sem espaços nas pontas. */
 export const nameSchema = (max = 60) =>
