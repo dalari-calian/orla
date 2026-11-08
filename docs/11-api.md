@@ -153,16 +153,25 @@ Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras
 | GET    | `/returns?year=`                     | rentabilidade real (doc 07 §3) |
 | GET    | `/price-observations`                | RB-30                          |
 
-### Importação / exportação
+### Importação / exportação (Fase 4)
 
-| método | rota                            |                                                 |
-| ------ | ------------------------------- | ----------------------------------------------- |
-| POST   | `/imports`                      | cria job com mapping                            |
-| POST   | `/imports/:id/rows`             | lote de até 500 linhas já parseadas → validação |
-| POST   | `/imports/:id/commit` · `/undo` |                                                 |
-| GET    | `/imports`                      | histórico                                       |
-| GET    | `/exports/:entity?format=csv    | xlsx&from=&to=`                                 |     |
-| GET    | `/backup` · `POST /restore`     | JSON completo                                   |
+| método | rota                                          |                                                                       |
+| ------ | --------------------------------------------- | --------------------------------------------------------------------- |
+| POST   | `/imports`                                    | cria a importação (`kind`, `fileName`, `mapping`)                   |
+| POST   | `/imports/:id/rows`                           | lote de até 500 rascunhos já interpretados → conferência por linha    |
+| POST   | `/imports/:id/commit`                         | grava tudo numa transação (`skipRows`, `createMissing`)             |
+| POST   | `/imports/:id/undo`                           | desfaz (soft delete do que foi criado; metas voltam ao valor anterior) |
+| GET    | `/imports` · `/imports/mappings`              | histórico · último mapeamento de cada tipo                            |
+| GET    | `/exports/:entity?format=csv|json&from=&to=` | `transactions` ou `installment-plans`                                 |
+| GET    | `/backup` · POST `/restore`                   | JSON completo · restaurar (`merge` ou `replace`)                      |
+
+- O arquivo é lido **no navegador** (SheetJS para .xlsx/.xls; CSV pelo core, UTF-8 ou Latin-1). A API recebe **rascunhos** (`importDraftSchema` em `packages/contracts/src/imports.ts`): `transaction`, `installmentPlan` ou `monthGoal`, com contas, cartões, categorias e estabelecimentos **pelo nome**.
+- `POST /imports/:id/rows` devolve, por linha, `status` (`ok` · `warning` · `duplicate` · `error`), mensagens e o que será criado ("Conta: Ailos"). Nomes casam sem acento/maiúsculas; sem igualdade exata, vale um único cadastro que comece com o nome ("Nubank" → "Nubank Roxinho"). Cartão inexistente é erro (cartão precisa de fechamento/vencimento); categoria, conta e estabelecimento são criados no commit se `createMissing` (padrão).
+- Duplicado (RI-02): mesmo mês de competência + valor + descrição normalizada de um lançamento existente, ou mesma descrição de um lançamento gerado por modelo recorrente no mês; parcelamento com mesma descrição, nº de parcelas e total.
+- No commit, um lançamento importado com a mesma descrição de um modelo recorrente ativo **ocupa** o mês do modelo (`recurringTemplateId`), para o modelo não gerar o mesmo salário de novo. Desfazer solta o vínculo.
+- Parcelamento importado: 1ª competência informada (ou pela parcela atual, RI-04), parcelas `1..settledCount` pagas; com `payoffMonth`, as restantes viram um pagamento único ("Quitação: …") e o plano fica `paid_off`.
+- Exportação: CSV com `;`, BOM e as colunas do template (exportar → editar → importar de volta). `format=json` devolve `{ columns, rows }` e o navegador monta o .xlsx.
+- Backup: todas as tabelas do usuário (sem `userId`). Restaurar nunca toca em IDs de outro usuário; referências a cadastros que não são do usuário viram `null`. `replace` faz soft delete do que não está no arquivo.
 
 ### Jobs (protegidos por `CRON_SECRET`)
 

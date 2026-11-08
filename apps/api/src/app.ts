@@ -3,6 +3,8 @@ import type { PrismaClient } from '@orla/db'
 import express, { type Express } from 'express'
 import { createClock } from './lib/clock.ts'
 import { dashboardRouter } from './routes/dashboard.ts'
+import { exportsRouter } from './routes/exports.ts'
+import { importsRouter } from './routes/imports.ts'
 import { RateLimiter } from './lib/rate-limit.ts'
 import { requireAuth } from './middleware/auth.ts'
 import { errorHandler, notFoundHandler } from './middleware/error-handler.ts'
@@ -56,6 +58,8 @@ export function createApp(deps: AppDeps): Express {
   app.disable('x-powered-by')
   app.set('trust proxy', 1)
   app.use(securityHeaders)
+  // Backup completo e lotes de importação podem passar de 1 MB; o resto continua limitado.
+  app.use(['/api/v1/restore', '/api/v1/imports'], express.json({ limit: '25mb' }))
   app.use(express.json({ limit: '1mb' }))
 
   const v1 = express.Router()
@@ -85,6 +89,8 @@ export function createApp(deps: AppDeps): Express {
   authed.use(monthsRouter(prisma))
   authed.use(installmentPlansRouter(prisma, clock))
   authed.use(dashboardRouter(prisma, clock))
+  authed.use(importsRouter(prisma, clock))
+  authed.use(exportsRouter(prisma))
   v1.use(authed)
 
   app.use('/api/v1', v1)

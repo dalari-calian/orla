@@ -29,7 +29,7 @@ Três caminhos para os dados entrarem, todos editáveis depois:
 
 ### Templates oficiais
 
-Disponíveis para download na tela de importação (`.xlsx` com uma aba de exemplo e uma de instruções). Colunas:
+Disponíveis para download na tela de importação (`.xlsx` com uma aba de exemplo e uma de instruções), para os três tipos: Lançamentos, Parcelamentos e **Planilha mensal** (o formato de blocos por mês). Os exemplos ficam em `packages/core/src/import/examples.ts` e os testes garantem que o próprio importador lê cada um sem erro. Colunas:
 
 **Lançamentos**: `data; competencia (mm/aaaa, opcional); tipo (receita|despesa); natureza (fixa|variavel|planejamento|extra); descricao; valor; categoria; forma_pagamento (pix|debito|credito|dinheiro|boleto|transferencia); conta; cartao; estabelecimento; status (previsto|pago); observacao`
 
@@ -44,6 +44,19 @@ Disponíveis para download na tela de importação (`.xlsx` com uma aba de exemp
 **Balanços**: `data; ticker_ou_nome; corretora; quantidade; preco; valor; dy; pvp`
 
 > **Tarefa para o dono do projeto:** exportar as planilhas atuais e colocar uma cópia anonimizada em `docs/referencias/planilhas/` para o Claude Code ajustar os sinônimos de coluna ao formato real.
+
+### Planilha mensal do dono (formato "ORÇAMENTO")
+
+Além dos templates, o wizard tem o tipo **Minha planilha mensal**, que lê o formato real das planilhas atuais (uma aba por ano, um bloco por mês). Decisões:
+
+- **Blocos**: título do mês sozinho na coluna A (JANEIRO…DEZEMBRO; depois de dezembro o ano vira). Ano pelo nome da aba ("FINANÇAS - 2026"), editável no passo 2. Colunas à direita da tabela (anotações) são ignoradas.
+- **Entradas** (entre "DESCRIÇÃO ENTRADA" e "DESCRIÇÃO DESPESA"): "SALÁRIO" vira receita **fixa**; as demais, **extra** — inclusive "VALOR MÊS ANTERIOR" (decisão do dono). Valor 0 é ignorado. Meses até o atual entram recebidos; depois, previstos.
+- **Despesas**: TIPO FIXO → fixa · CRÉDITO → variável no crédito · DÉBITO/PIX → variável · PLANEJAMENTO → planejamento. Competência = mês do bloco; a DATA é mantida se cair no mês ou até 2 meses antes (compras do crédito), senão vira o mesmo dia no mês do bloco. "DATA PAGO" preenchida = pago.
+- **BANCO/QUEM**: no passo 3 o usuário diz o que cada valor é — **cartão** (compras no crédito e contas fixas vão para a fatura), **conta**, **pessoa/loja** (estabelecimento) ou ignorar. Crédito sem cartão associado entra como forma "outro", com aviso.
+- **Parcelas** (QTD. PARCELAS > 1): as linhas de todos os meses com a mesma descrição (sem "(QUITEI)") e nº de parcelas viram **um parcelamento**. 1ª parcela = mês − (PARCELA − 1); pagas até a maior PARCELA marcada como paga; "QUITADO" vira quitação antecipada naquele mês. Sem valor nenhum na planilha → ignorado.
+- **"VALOR ECONOMIZAR"** vira a **meta investida do mês** (meta = investido = valor) — decisão do dono. "TOTAL GASTOS" e "SOBROU" são ignorados.
+
+O SheetJS (0.20.3, versão oficial do site deles — a do npm tem falhas conhecidas) só é carregado nas telas de importar/exportar.
 
 ## 2. Exportação e backup
 

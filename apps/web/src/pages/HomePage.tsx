@@ -33,6 +33,7 @@ import { errorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMonthYear } from '@/lib/dates'
 import { useCountUp } from '@/lib/motion'
+import { CURRENT_PHASE } from '@/routes/screens'
 
 const roadmap = [
   { phase: 0, title: 'Fundação', detail: 'Monorepo, banco, API, casca do app' },
@@ -45,8 +46,6 @@ const roadmap = [
   { phase: 7, title: 'Balanço', detail: 'Rentabilidade real mês a mês' },
   { phase: 8, title: 'Notícias e polimento', detail: 'Notícias, ocultar valores, E2E' },
 ]
-
-const CURRENT_PHASE = 3
 
 function HeroAmount({ cents }: { cents: number }) {
   const parts = formatBRLParts(useCountUp(cents))

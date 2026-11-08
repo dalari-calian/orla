@@ -15,7 +15,7 @@ import { useLogout, useMe, useUpdateProfile } from '@/features/auth/api'
 import { errorMessage } from '@/lib/api'
 import { zodResolver } from '@/lib/form'
 import { useTheme, type ThemePreference } from '@/lib/theme'
-import { screensOf } from '@/routes/screens'
+import { CURRENT_PHASE, screensOf } from '@/routes/screens'
 
 const themeOptions = [
   { value: 'light', label: 'Claro', icon: Sun },
@@ -126,7 +126,7 @@ export function ConfigPage() {
               to={screen.path}
               icon={screen.icon}
               title={screen.title}
-              value={screen.phase > 1 ? `Fase ${screen.phase}` : undefined}
+              value={screen.phase > CURRENT_PHASE ? `Fase ${screen.phase}` : undefined}
             />
           ))}
         </GroupedList>

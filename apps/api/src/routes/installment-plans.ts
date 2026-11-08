@@ -2,7 +2,6 @@ import {
   buildInstallmentSchedule,
   competenceMonthToDate,
   computePayoff,
-  dateInMonth,
   dateToCompetenceMonth,
   dateToIsoDate,
   firstMonthFromCurrentInstallment,
@@ -11,12 +10,9 @@ import {
   isoDateToCompetenceMonth,
   isoDateToDate,
   monthlyCommitment,
-  parseIsoDate,
   payoffTotal,
   planInstallmentEdit,
   statementCompetenceMonth,
-  statementDates,
-  type CardCompetenceMode,
   type InstallmentLike,
   type InstallmentPlanStatus,
 } from '@orla/core'
@@ -38,10 +34,10 @@ import { centsToNumber, ensureFound, paramId, toIso } from '../lib/db.ts'
 import { conflict } from '../lib/errors.ts'
 import {
   assertRefs,
+  installmentDate,
   financeSettings,
   toTransaction,
   transactionInclude,
-  type CardRef,
 } from '../lib/finance.ts'
 import { parse } from '../lib/validate.ts'
 import { userIdOf } from '../middleware/auth.ts'
@@ -93,20 +89,6 @@ function toPlan(row: PlanRow, viewMonth: string): InstallmentPlan {
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
   }
-}
-
-/**
- * Data de cada parcela: no crédito, o vencimento da fatura; senão o mesmo dia da compra
- * em cada mês (dia 31 em mês curto → último dia).
- */
-function installmentDate(
-  competenceMonth: string,
-  purchaseDate: string,
-  card: CardRef | null,
-  mode: CardCompetenceMode,
-): Date {
-  if (card) return isoDateToDate(statementDates(competenceMonth, card, mode).dueDate)
-  return isoDateToDate(dateInMonth(competenceMonth, parseIsoDate(purchaseDate).day))
 }
 
 const listQuerySchema = z.object({

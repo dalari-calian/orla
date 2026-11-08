@@ -2,8 +2,13 @@ import {
   addMonths,
   competenceMonthToDate,
   dateToCompetenceMonth,
+  dateInMonth,
   dateToIsoDate,
+  isoDateToCompetenceMonth,
   isoDateToDate,
+  parseIsoDate,
+  statementCompetenceMonth,
+  statementDates,
   templateDateIn,
   templatesToMaterialize,
   type CardCompetenceMode,
@@ -217,4 +222,35 @@ export async function materializeMonth(db: Db, userId: string, month: string): P
 /** Primeiro dia do mês seguinte (limite exclusivo para filtros de mês). */
 export function nextMonthDate(month: string): Date {
   return competenceMonthToDate(addMonths(month, 1))
+}
+
+// ─── Competência e datas ─────────────────────────────────────────────────────
+
+/**
+ * Competência de um lançamento (RF-02/03): informada pelo usuário, ou a da fatura
+ * no crédito, ou o mês da data.
+ */
+export function resolveCompetence(input: {
+  competenceMonth?: string | undefined
+  date: string
+  card: CardRef | null
+  mode: 'due_month' | 'closing_month'
+}): string {
+  if (input.competenceMonth) return input.competenceMonth
+  if (input.card) return statementCompetenceMonth(input.date, input.card, input.mode)
+  return isoDateToCompetenceMonth(input.date)
+}
+
+/**
+ * Data de cada parcela: no crédito, o vencimento da fatura; senão o mesmo dia da compra
+ * em cada mês (dia 31 em mês curto → último dia).
+ */
+export function installmentDate(
+  competenceMonth: string,
+  purchaseDate: string,
+  card: CardRef | null,
+  mode: CardCompetenceMode,
+): Date {
+  if (card) return isoDateToDate(statementDates(competenceMonth, card, mode).dueDate)
+  return isoDateToDate(dateInMonth(competenceMonth, parseIsoDate(purchaseDate).day))
 }

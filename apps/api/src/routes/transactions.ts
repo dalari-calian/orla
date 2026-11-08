@@ -4,9 +4,7 @@ import {
   dateToIsoDate,
   defaultStatusFor,
   isNatureAllowed,
-  isoDateToCompetenceMonth,
   isoDateToDate,
-  statementCompetenceMonth,
 } from '@orla/core'
 import {
   createTransactionRequestSchema,
@@ -25,9 +23,9 @@ import { conflict, validationError } from '../lib/errors.ts'
 import {
   assertRefs,
   financeSettings,
+  resolveCompetence,
   toTransaction,
   transactionInclude,
-  type CardRef,
   type Db,
 } from '../lib/finance.ts'
 import { parse } from '../lib/validate.ts'
@@ -35,21 +33,6 @@ import { userIdOf } from '../middleware/auth.ts'
 
 function fieldError(path: string, message: string): never {
   throw validationError(message, { fields: [{ path, message }] })
-}
-
-/**
- * Competência de um lançamento (RF-02/03): informada pelo usuário, ou a da fatura
- * no crédito, ou o mês da data.
- */
-function resolveCompetence(input: {
-  competenceMonth?: string | undefined
-  date: string
-  card: CardRef | null
-  mode: 'due_month' | 'closing_month'
-}): string {
-  if (input.competenceMonth) return input.competenceMonth
-  if (input.card) return statementCompetenceMonth(input.date, input.card, input.mode)
-  return isoDateToCompetenceMonth(input.date)
 }
 
 /**

@@ -35,6 +35,7 @@ model User {
   installmentPlans   InstallmentPlan[]
   transactions       Transaction[]
   monthSettings      MonthSettings[]
+  importJobs         ImportJob[]
 
   @@map("users")
 }
@@ -315,19 +316,62 @@ model Transaction {
 
 /// Ajustes de um mês: meta de investimento do mês (RF-50) e observações.
 model MonthSettings {
-  userId           String    @map("user_id") @db.Uuid
-  competenceMonth  DateTime  @map("competence_month") @db.Date
+  userId            String    @map("user_id") @db.Uuid
+  competenceMonth   DateTime  @map("competence_month") @db.Date
   /// null = usa a meta padrão do usuário.
-  savingsGoalCents BigInt?   @map("savings_goal_cents")
+  savingsGoalCents  BigInt?   @map("savings_goal_cents")
   /// Quanto da meta já foi investido no mês (a meta funciona como uma conta). null = nada.
-  goalInvestedCents BigInt?  @map("goal_invested_cents")
-  notes            String?
-  closedAt         DateTime? @map("closed_at") @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  goalInvestedCents BigInt?   @map("goal_invested_cents")
+  notes             String?
+  closedAt          DateTime? @map("closed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, competenceMonth])
   @@map("month_settings")
+}
+
+// ─── Importação (docs/08 › RI-03) ────────────────────────────────────────────
+
+/// Uma importação de arquivo. Guarda o mapeamento (reaproveitado na próxima) e permite desfazer.
+model ImportJob {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  /// transactions · installments · monthly_sheet
+  kind        String
+  fileName    String    @map("file_name")
+  mapping     Json?
+  /// pending · committed · undone
+  status      String    @default("pending")
+  stats       Json?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  committedAt DateTime? @map("committed_at") @db.Timestamptz(3)
+  undoneAt    DateTime? @map("undone_at") @db.Timestamptz(3)
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rows ImportRow[]
+
+  @@index([userId, createdAt])
+  @@map("import_jobs")
+}
+
+/// Linha importada (ou cadastro criado pela importação, com row_number 0): o que veio do arquivo,
+/// o rascunho validado e o que foi gravado — base do "desfazer importação".
+model ImportRow {
+  id         String  @id @default(uuid(7)) @db.Uuid
+  jobId      String  @map("job_id") @db.Uuid
+  rowNumber  Int     @map("row_number")
+  raw        Json?
+  parsed     Json?
+  errors     Json?
+  /// transaction · installment_plan · month_settings · account · category · payee
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id") @db.Uuid
+
+  job ImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("import_rows")
 }
