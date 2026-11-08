@@ -94,6 +94,8 @@ describe('RF-51 — resumo do mês', () => {
       expenseForecastCents: 1_830_00,
       expenseSettledCents: 1_580_00,
       savingsGoalCents: 1_200_00,
+      goalInvestedCents: 0,
+      goalRemainingCents: 1_200_00,
       projectedSurplusCents: 3_270_00,
       currentBalanceCents: 4_420_00,
       freeToSpendCents: 3_270_00,
@@ -113,6 +115,46 @@ describe('RF-51 — resumo do mês', () => {
 
   it('mês vazio', () => {
     expect(computeMonthSummary([], noGoal).projectedSurplusCents).toBe(0)
+  })
+})
+
+describe('Meta como conta do mês (investido)', () => {
+  const salary = tx({ type: 'income', amountCents: 9_900_00, status: 'settled' })
+  const goal = { monthOverrideCents: 1_900_00, defaultGoal: { mode: 'none' as const } }
+
+  it('nada investido: a sobra já desconta a meta, o saldo ainda não', () => {
+    const summary = computeMonthSummary([salary], goal)
+    expect(summary.projectedSurplusCents).toBe(8_000_00)
+    expect(summary.currentBalanceCents).toBe(9_900_00)
+    expect(summary.goalInvestedCents).toBe(0)
+    expect(summary.goalRemainingCents).toBe(1_900_00)
+  })
+
+  it('meta investida inteira: sai do saldo e a sobra não muda', () => {
+    const summary = computeMonthSummary([salary], { ...goal, investedCents: 1_900_00 })
+    expect(summary.currentBalanceCents).toBe(8_000_00)
+    expect(summary.projectedSurplusCents).toBe(8_000_00)
+    expect(summary.goalRemainingCents).toBe(0)
+  })
+
+  it('investiu menos: a diferença continua reservada (falta investir)', () => {
+    const summary = computeMonthSummary([salary], { ...goal, investedCents: 1_000_00 })
+    expect(summary.currentBalanceCents).toBe(8_900_00)
+    expect(summary.projectedSurplusCents).toBe(8_000_00)
+    expect(summary.goalRemainingCents).toBe(900_00)
+  })
+
+  it('investiu mais que a meta: reserva o que foi investido', () => {
+    const summary = computeMonthSummary([salary], { ...goal, investedCents: 2_500_00 })
+    expect(summary.currentBalanceCents).toBe(7_400_00)
+    expect(summary.projectedSurplusCents).toBe(7_400_00)
+    expect(summary.goalRemainingCents).toBe(0)
+  })
+
+  it('sem meta e sem investimento: nada muda', () => {
+    const summary = computeMonthSummary([salary], { ...noGoal, investedCents: null })
+    expect(summary.projectedSurplusCents).toBe(9_900_00)
+    expect(summary.currentBalanceCents).toBe(9_900_00)
   })
 })
 

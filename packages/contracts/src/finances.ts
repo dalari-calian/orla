@@ -150,6 +150,10 @@ export const monthSummarySchema = z.object({
   expenseForecastCents: z.number().int(),
   expenseSettledCents: z.number().int(),
   savingsGoalCents: z.number().int(),
+  /** Quanto da meta já foi investido (a meta funciona como uma conta do mês). */
+  goalInvestedCents: z.number().int(),
+  /** Quanto falta investir para cumprir a meta. */
+  goalRemainingCents: z.number().int(),
   projectedSurplusCents: z.number().int(),
   currentBalanceCents: z.number().int(),
   freeToSpendCents: z.number().int(),
@@ -164,6 +168,8 @@ export const monthResponseSchema = z.object({
   settings: z.object({
     /** Meta deste mês (null = usa a padrão). */
     savingsGoalCents: z.number().int().nullable(),
+    /** Quanto já investiu neste mês (null = nada registrado). */
+    goalInvestedCents: z.number().int().nullable(),
     defaultSavingsGoal: savingsGoalSchema,
     notes: z.string().nullable(),
   }),
@@ -174,6 +180,7 @@ export type MonthResponse = z.infer<typeof monthResponseSchema>
 export const updateMonthSettingsRequestSchema = z
   .object({
     savingsGoalCents: nonNegativeCentsSchema.nullable(),
+    goalInvestedCents: nonNegativeCentsSchema.nullable(),
     notes: notesSchema.nullable(),
   })
   .partial()
@@ -181,6 +188,7 @@ export type UpdateMonthSettingsRequest = z.infer<typeof updateMonthSettingsReque
 
 export const monthSettingsResponseSchema = z.object({
   savingsGoalCents: z.number().int().nullable(),
+  goalInvestedCents: z.number().int().nullable(),
   notes: z.string().nullable(),
 })
 export type MonthSettingsResponse = z.infer<typeof monthSettingsResponseSchema>

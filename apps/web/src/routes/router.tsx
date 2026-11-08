@@ -69,6 +69,18 @@ const implemented: RouteObject[] = [
     }),
   },
   {
+    path: '/financas/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/features/finances/DashboardPage')).DashboardPage,
+    }),
+  },
+  {
+    path: '/financas/projecao',
+    lazy: async () => ({
+      Component: (await import('@/features/finances/ProjectionPage')).ProjectionPage,
+    }),
+  },
+  {
     path: '/financas/cartoes/:id/fatura',
     lazy: async () => ({
       Component: (await import('@/features/finances/CardStatementPage')).CardStatementPage,

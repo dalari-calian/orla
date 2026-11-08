@@ -52,7 +52,7 @@ Tela única centralizada, logo, campos username e senha, "Criar conta" (pede có
 
 - Header: `MonthSwitcher`, ocultar valores.
 - Resumo fixo compacto: Entradas · Saídas · Sobra.
-- Filtros (chips): Todos · Receitas · Despesas · Previstos · Cartão X · Categoria.
+- Filtros (chips): Todos · Receitas · Despesas · Investimento (a meta do mês, fora de Despesas) · Previstos · Cartão X · Categoria.
 - Lista agrupada por dia (ou por categoria — alternável), cada linha: ícone da categoria, descrição, estabelecimento · forma de pagamento · "3/12" se parcela, valor; status previsto em texto secundário com bolinha vazia; toque → editar; swipe → pagar/excluir.
 - Seções colapsáveis: **Receitas**, **Fixas**, **Parcelas do mês**, **Planejamentos**, **Variáveis**.
 - Desktop: tabela com colunas Data · Descrição · Categoria · Forma · Conta/Cartão · Estabelecimento · Natureza · Status · Valor, ordenável, edição inline e em lote.

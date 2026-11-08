@@ -103,3 +103,10 @@ export function monthsBetween(from: string, to: string): number {
   const b = parseCompetenceMonth(to)
   return (b.year - a.year) * 12 + (b.month - a.month)
 }
+
+/** Soma (ou subtrai) dias a uma data ISO, atravessando meses e anos. */
+export function addDaysIso(value: string, days: number): IsoDate {
+  const date = isoDateToDate(value)
+  date.setUTCDate(date.getUTCDate() + days)
+  return dateToIsoDate(date)
+}

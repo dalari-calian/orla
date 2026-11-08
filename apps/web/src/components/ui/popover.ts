@@ -92,10 +92,15 @@ export function useAnchoredPopover({
   return { panelId, anchorRef, panelRef, open, placement, show, hide }
 }
 
-/** Cantos do campo enquanto o painel está aberto: a borda reta fica do lado do painel. */
+/**
+ * Campo enquanto o painel está aberto: fica com a mesma sombra do painel e a borda reta do
+ * lado dele, e a sombra é cortada na emenda — campo + lista viram uma peça só.
+ */
 export function attachedCorners(open: boolean, placement: Placement): string | undefined {
   if (!open) return undefined
-  return placement === 'below' ? 'rounded-b-none' : 'rounded-t-none'
+  return placement === 'below'
+    ? 'rounded-b-none shadow-[0_0_28px_-8px_rgb(0_0_0/0.3)] [clip-path:inset(-48px_-48px_0_-48px)]'
+    : 'rounded-t-none shadow-[0_0_28px_-8px_rgb(0_0_0/0.3)] [clip-path:inset(0_-48px_-48px_-48px)]'
 }
 
 /** Classes do painel colado (cor do campo, cantos arredondados só na ponta, sombra). */

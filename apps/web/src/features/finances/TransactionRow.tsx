@@ -47,11 +47,11 @@ export function TransactionRow({
       : `Marcar "${transaction.description}" como pago`
 
   return (
-    <li className="relative flex items-center [&+li]:before:absolute [&+li]:before:inset-x-4 [&+li]:before:top-0 [&+li]:before:h-px [&+li]:before:scale-y-50 [&+li]:before:bg-separator">
+    <li className="relative flex items-center transition-colors hover:bg-surface-2 has-[:active]:bg-surface-2 [&+li]:before:absolute [&+li]:before:inset-x-4 [&+li]:before:top-0 [&+li]:before:h-px [&+li]:before:scale-y-50 [&+li]:before:bg-separator">
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-h-15 min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left transition-colors hover:bg-surface-2 active:bg-surface-2"
+        className="flex min-h-15 min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left"
       >
         <IconBadge icon={Icon} color={category?.color ?? 'var(--text-2)'} />
         <span className="min-w-0 flex-1">

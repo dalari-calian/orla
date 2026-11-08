@@ -3,7 +3,7 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react'
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 const STORAGE_KEY = 'orla.theme'
-const THEME_COLOR = { light: '#F2F2F7', dark: '#000000' } as const
+const THEME_COLOR = { light: '#F2F2F7', dark: '#1E1F23' } as const
 const darkQuery = () => window.matchMedia('(prefers-color-scheme: dark)')
 
 const listeners = new Set<() => void>()

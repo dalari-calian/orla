@@ -68,7 +68,7 @@ Implementado na Fase 1 (schemas em `packages/contracts/src/registrations.ts` e `
 | método | rota                                      |                                                                               |
 | ------ | ----------------------------------------- | ----------------------------------------------------------------------------- |
 | GET    | `/months/:month`                          | materializa templates (RF-11) e retorna `{ summary, transactions, settings }` |
-| PATCH  | `/months/:month/settings`                 | meta do mês                                                                   |
+| PATCH  | `/months/:month/settings`                 | meta do mês e quanto já foi investido                                         |
 | GET    | `/months/:month/dashboard`                | agregados do doc 04 §8                                                        |
 | GET    | `/projection?from=&months=12`             | RF-52                                                                         |
 | CRUD   | `/transactions`                           | filtros: `month, type, nature, status, categoryId, cardId, accountId, q`      |
@@ -84,9 +84,9 @@ Implementado na Fase 1 (schemas em `packages/contracts/src/registrations.ts` e `
 Implementado na Fase 2 (schemas em `packages/contracts/src/finances.ts`; regras em `packages/core/src/finance`):
 
 - **Mês**
-  - `GET /months/:month` materializa os modelos ativos (RF-11, idempotente) e devolve `{ month, summary, settings: { savingsGoalCents, defaultSavingsGoal, notes }, transactions }`. `summary` segue a RF-51.
-  - `PATCH /months/:month/settings { savingsGoalCents?: number | null, notes? }` define a meta do mês; `null` volta à meta padrão.
-  - Mês malformado → `404`. Dashboard e projeção ficam para a Fase 3.
+  - `GET /months/:month` materializa os modelos ativos (RF-11, idempotente) e devolve `{ month, summary, settings: { savingsGoalCents, goalInvestedCents, defaultSavingsGoal, notes }, transactions }`. `summary` segue a RF-51.
+  - `PATCH /months/:month/settings { savingsGoalCents?: number | null, goalInvestedCents?: number | null, notes? }` define a meta do mês (`null` volta à meta padrão) e quanto dela já foi investido (`null` = nada; sai do saldo do mês).
+  - Mês malformado → `404`. Dashboard e projeção: ver Fase 3 abaixo.
 - **Lançamentos**
   - Rotas: `GET /transactions?month&type&nature&status&categoryId&cardId&accountId&payeeId&q&cursor&limit` (ordem: data desc; `nextCursor` = id do último) · `GET/PATCH/DELETE /transactions/:id` · `POST /transactions` · `POST /transactions/:id/settle { amountCents?, date? }` · `/unsettle` · `/restore`.
   - Criar: `{ type, nature: fixed|variable|planned|extra, description, amountCents, date, competenceMonth?, status?, categoryId?, accountId?, payeeId?, paymentMethod?, creditCardId?, parentPlannedId?, tags?, notes? }`. Receita é `fixed|extra`; `installment` só via parcelamento. Crédito exige `creditCardId`.
@@ -108,6 +108,16 @@ Implementado na Fase 2 (schemas em `packages/contracts/src/finances.ts`; regras 
   - `POST .../pay` marca todos os lançamentos da fatura como realizados.
 - **Estabelecimento** — `GET /payees/:id/suggestion` → `{ categoryId, paymentMethod, creditCardId, accountId }`, copiados do último lançamento (RM-03).
 - Erros de regra do core (ex.: parcela < R$ 0,01, total menor que o já pago) → `400 VALIDATION`.
+
+Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras em `packages/core/src/finance/dashboard.ts`):
+
+- **Meses sem gravar nada** — dashboard e projeção leem vários meses de uma vez; meses ainda não abertos ganham, em memória, os previstos dos modelos recorrentes (os mesmos que a RF-11 criaria). Lançamento gerado e excluído não volta.
+- **Dashboard** — `GET /months/:month/dashboard?period=month|quarter|year` (padrão `month`; `quarter` = o mês e os 2 anteriores; `year` = o ano civil). Devolve `{ month, period, months, summary, previousSummary, byCategory[{ categoryId, amountCents, previousCents, deltaCents, share }], byPaymentMethod, byAccount, byCard, topPayees[5], budgets[{ categoryId, budgetCents, spentCents, ratio, level: ok|warning|exceeded }], evolution[12] }`.
+  - As quebras usam o valor que conta nas saídas (RF-22: planejamento com gastos só pelo que ainda reserva), então somam "Saídas". Subcategorias somam na principal.
+  - Orçamento (RF-61): alerta a partir de 80%, estourado a partir de 100%; o teto da principal cobre as subcategorias; em períodos de vários meses o teto é multiplicado.
+  - `evolution`: 12 meses terminando no fim do período; mês sem nenhum lançamento tem sobra 0 (sem meta).
+- **Projeção** — `GET /projection?from=YYYY-MM&months=12` (padrão: mês atual, 1–24 meses) → `{ from, rows[{ month, incomeCents, fixedCents, installmentCents, plannedCents, variableCents, goalCents, surplusCents }], firstNegativeMonth }` (RF-52).
+- **Próximos vencimentos** — `GET /upcoming?days=7` (1–31) → `{ today, items }`. Itens: `{ kind: "transaction", date, amountCents, transaction }` (despesa prevista fora do crédito, inclusive atrasadas até 31 dias) ou `{ kind: "statement", date, amountCents, creditCardId, competenceMonth }` (fatura com valor previsto). Abre (materializa) o mês atual e o seguinte.
 
 ### Carteira
 

@@ -1,10 +1,17 @@
 import { plannedProgress } from '@orla/core'
 import { formatBRL } from '@orla/core/money'
-import type { MonthResponse, Transaction } from '@orla/contracts'
+import type { MonthResponse, Transaction, UpdateMonthSettingsRequest } from '@orla/contracts'
 import {
+  BanknoteArrowUp,
   CalendarRange,
+  CalendarSync,
+  Check,
+  Circle,
+  ChartLine,
   ChevronDown,
   CreditCard,
+  LayoutDashboard,
+  PiggyBank,
   Plus,
   ReceiptText,
   Repeat,
@@ -16,8 +23,11 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { AnimatedMoney } from '@/components/ui/AnimatedMoney'
 import { Card } from '@/components/ui/Card'
+import { IconBadge } from '@/components/ui/CategoryIcon'
+import { SlideSwap } from '@/components/ui/SlideSwap'
 import { ChipGroup } from '@/components/ui/Chips'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { ProgressBar } from '@/components/ui/Progress'
 import { Sheet } from '@/components/ui/Sheet'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { useToast } from '@/components/ui/Toast'
@@ -25,18 +35,21 @@ import { accounts, categories, creditCards, payees } from '@/features/registrati
 import { CreditCardForm } from '@/features/registrations/forms'
 import { errorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { NewRecurringSheet } from './NewRecurringSheet'
+import type { RecurringKind } from './RecurringTemplatesPage'
 import { useMonth, useTransactionMutations, useUpdateMonthSettings } from './api'
 import { useEntrySheet } from './EntrySheet'
 import { monthLabel, useMonthParam } from './labels'
 import { MonthSwitcher } from './MonthSwitcher'
 import { TransactionRow } from './TransactionRow'
 
-type Filter = 'all' | 'income' | 'expense' | 'forecast'
+type Filter = 'all' | 'income' | 'expense' | 'investment' | 'forecast'
 
 const filterOptions = [
   { value: 'all', label: 'Todos' },
   { value: 'income', label: 'Receitas' },
   { value: 'expense', label: 'Despesas' },
+  { value: 'investment', label: 'Investimento' },
   { value: 'forecast', label: 'Previstos' },
 ] as const
 
@@ -127,7 +140,11 @@ function SummaryCard({ data, onEditGoal }: { data: MonthResponse; onEditGoal: ()
             label="Meta"
             value={summary.savingsGoalCents}
             detail={
-              data.settings.savingsGoalCents !== null ? 'deste mês · editar' : 'padrão · editar'
+              summary.goalInvestedCents > 0
+                ? `investido ${formatBRL(summary.goalInvestedCents)}`
+                : data.settings.savingsGoalCents !== null
+                  ? 'deste mês · editar'
+                  : 'padrão · editar'
             }
           />
         </button>
@@ -140,7 +157,10 @@ function SummaryCard({ data, onEditGoal }: { data: MonthResponse; onEditGoal: ()
   )
 }
 
-/** Meta de investimento deste mês (RF-50): sobrescreve a padrão só aqui. */
+/**
+ * Meta de investimento do mês (RF-50), tratada como uma conta: o valor da meta (só deste mês
+ * ou a padrão) e quanto já foi investido — o investido sai do saldo do mês.
+ */
 function MonthGoalSheet({
   month,
   data,
@@ -154,7 +174,9 @@ function MonthGoalSheet({
 }) {
   const update = useUpdateMonthSettings(month)
   const toast = useToast()
-  const [value, setValue] = useState<number | null>(data.settings.savingsGoalCents)
+  const { summary } = data
+  const [goalValue, setGoalValue] = useState<number | null>(summary.savingsGoalCents)
+  const [invested, setInvested] = useState<number | null>(data.settings.goalInvestedCents)
   const goal = data.settings.defaultSavingsGoal
   const defaultLabel =
     goal.mode === 'fixed'
@@ -162,43 +184,170 @@ function MonthGoalSheet({
       : goal.mode === 'percent'
         ? `${goal.percent.replace('.', ',')}% das entradas`
         : 'sem meta'
+  const target = goalValue ?? 0
+  const investedNow = invested ?? 0
 
-  const save = (savingsGoalCents: number | null) =>
-    update.mutate(
-      { savingsGoalCents },
-      {
-        onSuccess: () => {
-          toast({ message: 'Meta do mês atualizada' })
-          onClose()
-        },
+  const save = (input: UpdateMonthSettingsRequest, message: string) =>
+    update.mutate(input, {
+      onSuccess: () => {
+        toast({ message })
+        onClose()
       },
-    )
+    })
+
+  function submit() {
+    const input: UpdateMonthSettingsRequest = {
+      goalInvestedCents: invested && invested > 0 ? invested : null,
+    }
+    // Só grava a meta "deste mês" se ela mudou (senão continua seguindo a padrão).
+    if (goalValue !== summary.savingsGoalCents) input.savingsGoalCents = goalValue ?? 0
+    save(input, 'Meta do mês atualizada')
+  }
 
   return (
     <Sheet open={open} onClose={onClose} title={`Meta de ${monthLabel(month)}`}>
       <div className="space-y-4">
         <MoneyInput
-          label="Quanto investir neste mês"
-          value={value}
-          onChange={setValue}
+          label="Meta deste mês"
+          value={goalValue}
+          onChange={setGoalValue}
           large
           hint={`Padrão: ${defaultLabel}. Mude a padrão em Configurações › Metas.`}
         />
+        <MoneyInput
+          label="Quanto já investiu"
+          value={invested}
+          onChange={setInvested}
+          hint="Sai do saldo do mês, como uma conta paga. Pode ser menos que a meta."
+        />
+        {target > 0 && (
+          <div className="space-y-1.5 rounded-field bg-surface-2 p-3">
+            <ProgressBar
+              value={Math.min(investedNow / target, 1)}
+              tone={investedNow >= target ? 'positive' : 'accent'}
+              label="Quanto da meta já foi investido"
+            />
+            <p className="text-footnote text-text-2 tabular">
+              {investedNow >= target
+                ? `Meta atingida: investido ${formatBRL(investedNow)}`
+                : `Investido ${formatBRL(investedNow)} de ${formatBRL(target)} · faltam ${formatBRL(target - investedNow)}`}
+            </p>
+          </div>
+        )}
         {update.error && (
           <p role="alert" className="text-footnote text-negative">
             {errorMessage(update.error)}
           </p>
         )}
-        <Button block loading={update.isPending} onClick={() => save(value ?? 0)}>
-          Salvar meta do mês
+        <Button block loading={update.isPending} onClick={submit}>
+          Salvar
         </Button>
+        {target > 0 && investedNow < target && (
+          <Button
+            block
+            variant="secondary"
+            disabled={update.isPending}
+            onClick={() =>
+              save(
+                {
+                  goalInvestedCents: target,
+                  ...(goalValue !== summary.savingsGoalCents && { savingsGoalCents: target }),
+                },
+                'Meta do mês investida',
+              )
+            }
+          >
+            Investi a meta inteira
+          </Button>
+        )}
         {data.settings.savingsGoalCents !== null && (
-          <Button block variant="plain" onClick={() => save(null)}>
+          <Button
+            block
+            variant="plain"
+            disabled={update.isPending}
+            onClick={() => save({ savingsGoalCents: null }, 'Voltou a usar a meta padrão')}
+          >
             Voltar a usar a meta padrão
           </Button>
         )}
       </div>
     </Sheet>
+  )
+}
+
+/**
+ * A meta na lista do mês, como uma conta a pagar: o check marca a meta inteira como investida
+ * (ou desfaz); tocar na linha abre o sheet para informar um valor parcial ou mudar a meta.
+ */
+function GoalRow({
+  month,
+  data,
+  onOpen,
+}: {
+  month: string
+  data: MonthResponse
+  onOpen: () => void
+}) {
+  const update = useUpdateMonthSettings(month)
+  const toast = useToast()
+  const [toggled, setToggled] = useState(false)
+  const { savingsGoalCents: goal, goalInvestedCents: invested } = data.summary
+  const done = invested > 0 && invested >= goal
+  const subtitle = done
+    ? 'investido'
+    : invested > 0
+      ? `investido ${formatBRL(invested)} · faltam ${formatBRL(goal - invested)}`
+      : 'a investir'
+
+  return (
+    <li className="relative flex items-center transition-colors hover:bg-surface-2 has-[:active]:bg-surface-2">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-h-15 min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left"
+      >
+        <IconBadge icon={PiggyBank} color="var(--accent)" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-body">Meta de investimento</span>
+          <span className="block truncate text-footnote text-text-2">{subtitle}</span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span className={cn('block text-body font-medium tabular', !done && 'opacity-70')}>
+            −{formatBRL(Math.max(goal, invested))}
+          </span>
+          <span className="block text-caption text-text-2">{done ? 'investido' : 'previsto'}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={update.isPending}
+        aria-pressed={done}
+        aria-label={
+          done ? 'Desmarcar a meta como investida' : 'Marcar a meta inteira como investida'
+        }
+        onClick={() => {
+          setToggled(true)
+          update.mutate(
+            { goalInvestedCents: done ? null : goal },
+            { onError: (error) => toast({ message: errorMessage(error), tone: 'error' }) },
+          )
+        }}
+        className="press flex size-12 shrink-0 items-center justify-center text-text-3 hover:text-accent disabled:opacity-50"
+      >
+        {done ? (
+          <span
+            className={cn(
+              'flex size-6 items-center justify-center rounded-full bg-positive text-white',
+              toggled && 'animate-pop',
+            )}
+          >
+            <Check className="size-4" strokeWidth={3} aria-hidden />
+          </span>
+        ) : (
+          <Circle className="size-6" strokeWidth={1.75} aria-hidden />
+        )}
+      </button>
+    </li>
   )
 }
 
@@ -307,6 +456,7 @@ export function FinancesMonthPage() {
   const [filter, setFilter] = useState<Filter>('all')
   const [goalOpen, setGoalOpen] = useState(false)
   const [cardOpen, setCardOpen] = useState(false)
+  const [recurringKind, setRecurringKind] = useState<RecurringKind | null>(null)
 
   const categoryById = useMemo(
     () => new Map((categoryList.data ?? []).map((category) => [category.id, category])),
@@ -323,8 +473,19 @@ export function FinancesMonthPage() {
     if (filter === 'income') return item.type === 'income'
     if (filter === 'expense') return item.type === 'expense'
     if (filter === 'forecast') return item.status === 'forecast'
+    // A aba Investimento mostra só a meta do mês (não é gasto, não entra em Despesas).
+    if (filter === 'investment') return false
     return true
   })
+  const summary = query.data?.summary
+  const hasGoal = Boolean(
+    summary && (summary.savingsGoalCents > 0 || summary.goalInvestedCents > 0),
+  )
+  const showGoal =
+    hasGoal &&
+    (filter === 'all' ||
+      filter === 'investment' ||
+      (filter === 'forecast' && (summary?.goalRemainingCents ?? 0) > 0))
 
   function toggle(transaction: Transaction) {
     const run =
@@ -367,6 +528,36 @@ export function FinancesMonthPage() {
           ) : null}
 
           <nav aria-label="Atalhos de Finanças" className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setRecurringKind('fixed')}
+              className="press flex min-h-14 items-center gap-2 rounded-card bg-surface px-4 text-left text-subhead font-medium shadow-card"
+            >
+              <CalendarSync className="size-5 shrink-0 text-accent" aria-hidden />
+              Conta fixa
+            </button>
+            <button
+              type="button"
+              onClick={() => setRecurringKind('income')}
+              className="press flex min-h-14 items-center gap-2 rounded-card bg-surface px-4 text-left text-subhead font-medium shadow-card"
+            >
+              <BanknoteArrowUp className="size-5 shrink-0 text-accent" aria-hidden />
+              Entrada fixa
+            </button>
+            <Link
+              to={`/financas/dashboard?mes=${month}`}
+              className="press flex min-h-14 items-center gap-2 rounded-card bg-surface px-4 text-subhead font-medium shadow-card"
+            >
+              <LayoutDashboard className="size-5 text-accent" aria-hidden />
+              Dashboard
+            </Link>
+            <Link
+              to="/financas/projecao"
+              className="press flex min-h-14 items-center gap-2 rounded-card bg-surface px-4 text-subhead font-medium shadow-card"
+            >
+              <ChartLine className="size-5 text-accent" aria-hidden />
+              Projeção
+            </Link>
             <Link
               to="/financas/parcelamentos"
               className="press flex min-h-14 items-center gap-2 rounded-card bg-surface px-4 text-subhead font-medium shadow-card"
@@ -410,90 +601,115 @@ export function FinancesMonthPage() {
             onChange={(value) => setFilter(value ?? 'all')}
           />
 
-          {query.isPending ? (
-            <LoadingList />
-          ) : query.isError ? (
-            <div className="rounded-card bg-surface p-4 shadow-card">
-              <ErrorState
-                description={errorMessage(query.error)}
-                onRetry={() => void query.refetch()}
-              />
-            </div>
-          ) : visible.length === 0 ? (
-            <div className="rounded-card bg-surface shadow-card">
-              <EmptyState
-                icon={ReceiptText}
-                title={
-                  transactions.length === 0
-                    ? `Nada lançado em ${monthLabel(month)}`
-                    : 'Nenhum lançamento neste filtro'
-                }
-                description={
-                  transactions.length === 0
-                    ? 'Lance gastos e receitas, ou cadastre o salário e as contas fixas em Recorrentes para eles aparecerem todo mês.'
-                    : undefined
-                }
-                action={
-                  transactions.length === 0 ? (
-                    <Button onClick={() => openNew()}>Lançar agora</Button>
-                  ) : (
-                    <Button variant="plain" onClick={() => setFilter('all')}>
-                      Ver todos
-                    </Button>
-                  )
-                }
-              />
-            </div>
-          ) : (
-            // Entra com fade quando chegam os dados de outro mês (não a cada refetch).
-            <div key={query.data?.month} className="animate-fade-in space-y-5">
-              {sectionDefs.map((section) => {
-                const items = visible.filter(section.match)
-                if (items.length === 0) return null
-                const total = items.reduce(
-                  (sum, item) =>
-                    sum +
-                    (item.nature === 'planned'
-                      ? plannedProgress(item, transactions).reservedCents
-                      : item.amountCents),
-                  0,
-                )
-                return (
-                  <Section key={section.key} title={section.title} total={total}>
-                    {items.map((item) => {
-                      const progress =
-                        item.nature === 'planned' ? plannedProgress(item, transactions) : null
-                      const parent = item.parentPlannedId
-                        ? byId.get(item.parentPlannedId)
-                        : undefined
-                      return (
-                        <TransactionRow
-                          key={item.id}
-                          transaction={item}
-                          category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
-                          payeeName={item.payeeId ? payeeById.get(item.payeeId) : undefined}
-                          extraSubtitle={
-                            progress && progress.spentCents > 0
-                              ? `gasto ${formatBRL(progress.spentCents)} de ${formatBRL(progress.plannedCents)}`
-                              : parent
-                                ? `em ${parent.description}`
-                                : undefined
-                          }
-                          onOpen={() => openEdit(item)}
-                          onToggleSettled={() => toggle(item)}
-                          toggling={pendingId === item.id}
-                        />
-                      )
-                    })}
+          <SlideSwap index={filterOptions.findIndex((option) => option.value === filter)}>
+            {query.isPending ? (
+              <LoadingList />
+            ) : query.isError ? (
+              <div className="rounded-card bg-surface p-4 shadow-card">
+                <ErrorState
+                  description={errorMessage(query.error)}
+                  onRetry={() => void query.refetch()}
+                />
+              </div>
+            ) : filter === 'investment' && !hasGoal ? (
+              <div className="rounded-card bg-surface shadow-card">
+                <EmptyState
+                  icon={PiggyBank}
+                  title={`Sem meta de investimento em ${monthLabel(month)}`}
+                  description="Defina quanto quer investir: o valor sai da sobra do mês como uma conta, para não ser gasto."
+                  action={<Button onClick={() => setGoalOpen(true)}>Definir meta</Button>}
+                />
+              </div>
+            ) : visible.length === 0 && !showGoal ? (
+              <div className="rounded-card bg-surface shadow-card">
+                <EmptyState
+                  icon={ReceiptText}
+                  title={
+                    transactions.length === 0
+                      ? `Nada lançado em ${monthLabel(month)}`
+                      : 'Nenhum lançamento neste filtro'
+                  }
+                  description={
+                    transactions.length === 0
+                      ? 'Lance gastos e receitas, ou cadastre o salário e as contas fixas em Recorrentes para eles aparecerem todo mês.'
+                      : undefined
+                  }
+                  action={
+                    transactions.length === 0 ? (
+                      <Button onClick={() => openNew()}>Lançar agora</Button>
+                    ) : (
+                      <Button variant="plain" onClick={() => setFilter('all')}>
+                        Ver todos
+                      </Button>
+                    )
+                  }
+                />
+              </div>
+            ) : (
+              // Entra com fade quando chegam os dados de outro mês (não a cada refetch).
+              <div key={query.data?.month} className="animate-fade-in space-y-5">
+                {query.data && showGoal && (
+                  <Section
+                    title="Investimento"
+                    total={Math.max(
+                      query.data.summary.savingsGoalCents,
+                      query.data.summary.goalInvestedCents,
+                    )}
+                  >
+                    <GoalRow month={month} data={query.data} onOpen={() => setGoalOpen(true)} />
                   </Section>
-                )
-              })}
-            </div>
-          )}
+                )}
+                {sectionDefs.map((section) => {
+                  const items = visible.filter(section.match)
+                  if (items.length === 0) return null
+                  const total = items.reduce(
+                    (sum, item) =>
+                      sum +
+                      (item.nature === 'planned'
+                        ? plannedProgress(item, transactions).reservedCents
+                        : item.amountCents),
+                    0,
+                  )
+                  return (
+                    <Section key={section.key} title={section.title} total={total}>
+                      {items.map((item) => {
+                        const progress =
+                          item.nature === 'planned' ? plannedProgress(item, transactions) : null
+                        const parent = item.parentPlannedId
+                          ? byId.get(item.parentPlannedId)
+                          : undefined
+                        return (
+                          <TransactionRow
+                            key={item.id}
+                            transaction={item}
+                            category={
+                              item.categoryId ? categoryById.get(item.categoryId) : undefined
+                            }
+                            payeeName={item.payeeId ? payeeById.get(item.payeeId) : undefined}
+                            extraSubtitle={
+                              progress && progress.spentCents > 0
+                                ? `gasto ${formatBRL(progress.spentCents)} de ${formatBRL(progress.plannedCents)}`
+                                : parent
+                                  ? `em ${parent.description}`
+                                  : undefined
+                            }
+                            onOpen={() => openEdit(item)}
+                            onToggleSettled={() => toggle(item)}
+                            toggling={pendingId === item.id}
+                          />
+                        )
+                      })}
+                    </Section>
+                  )
+                })}
+              </div>
+            )}
+          </SlideSwap>
         </div>
       </div>
 
       <NewCardSheet open={cardOpen} onClose={() => setCardOpen(false)} />
+      <NewRecurringSheet kind={recurringKind} onClose={() => setRecurringKind(null)} />
 
       {query.data && goalOpen && (
         <MonthGoalSheet

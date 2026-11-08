@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { TextField } from '@/components/ui/Field'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useToast } from '@/components/ui/Toast'
@@ -67,19 +68,21 @@ function GoalForm({ settings }: { settings: SettingsResponse }) {
           { value: 'none', label: 'Sem meta' },
         ]}
       />
-      {mode === 'fixed' && (
-        <MoneyInput label="Meta mensal" value={amount} onChange={setAmount} large />
-      )}
-      {mode === 'percent' && (
-        <TextField
-          label="Percentual das entradas do mês"
-          inputMode="decimal"
-          value={percent}
-          onChange={(event) => setPercent(event.target.value)}
-          trailing={<span className="pr-3 text-body text-text-2">%</span>}
-          hint="Inclui receitas extras do mês (presente, bônus)."
-        />
-      )}
+      <SlideSwap index={['fixed', 'percent', 'none'].indexOf(mode)}>
+        {mode === 'fixed' && (
+          <MoneyInput label="Meta mensal" value={amount} onChange={setAmount} large />
+        )}
+        {mode === 'percent' && (
+          <TextField
+            label="Percentual das entradas do mês"
+            inputMode="decimal"
+            value={percent}
+            onChange={(event) => setPercent(event.target.value)}
+            trailing={<span className="pr-3 text-body text-text-2">%</span>}
+            hint="Inclui receitas extras do mês (presente, bônus)."
+          />
+        )}
+      </SlideSwap>
       {(error !== null || update.error) && (
         <p role="alert" className="text-footnote text-negative">
           {error ?? errorMessage(update.error)}

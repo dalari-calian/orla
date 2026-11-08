@@ -2,6 +2,7 @@ import type { SignupMode } from '@orla/contracts'
 import type { PrismaClient } from '@orla/db'
 import express, { type Express } from 'express'
 import { createClock } from './lib/clock.ts'
+import { dashboardRouter } from './routes/dashboard.ts'
 import { RateLimiter } from './lib/rate-limit.ts'
 import { requireAuth } from './middleware/auth.ts'
 import { errorHandler, notFoundHandler } from './middleware/error-handler.ts'
@@ -83,6 +84,7 @@ export function createApp(deps: AppDeps): Express {
   authed.use(transactionsRouter(prisma))
   authed.use(monthsRouter(prisma))
   authed.use(installmentPlansRouter(prisma, clock))
+  authed.use(dashboardRouter(prisma, clock))
   v1.use(authed)
 
   app.use('/api/v1', v1)

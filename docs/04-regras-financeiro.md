@@ -75,13 +75,16 @@ Tudo que calcula fica em `packages/core/src/finance`. Cada regra abaixo tem ID (
   saidasPrevistas    = Σ expense (todas, incl. planejamentos pelo RF-22 e parcelas)
   saidasPagas        = Σ expense settled
   metaInvestimento   = month_settings ?? user_settings (valor ou % de entradasPrevistas)
-  sobraPrevista      = entradasPrevistas − saidasPrevistas − metaInvestimento
-  saldoAtual         = entradasRecebidas − saidasPagas            (o que de fato está na conta do mês)
+  investido          = month_settings.goal_invested_cents ?? 0   (quanto da meta já foi investido)
+  sobraPrevista      = entradasPrevistas − saidasPrevistas − max(metaInvestimento, investido)
+  saldoAtual         = entradasRecebidas − saidasPagas − investido (o que de fato está na conta do mês)
+  faltaInvestir      = max(metaInvestimento − investido, 0)
   livreParaGastar    = sobraPrevista (se > 0) — "quanto ainda posso gastar sem furar a meta"
   ```
   - `sobraPrevista < 0` → estado de alerta (vermelho) "Você vai furar a meta em R$ X".
+  - **A meta funciona como uma conta do mês**: reserva o valor inteiro na sobra desde o início (para não gastar o que é para investir) e aparece na lista do mês com o check de pago, na aba **Investimento** (e em Todos) — nunca em Despesas, porque investir não é gasto. Marcar o check registra a meta inteira como investida; tocar na linha permite informar um valor parcial ("investido R$ 1.000 de R$ 1.900 · faltam R$ 900"). Investir menos que a meta não libera a diferença para gastar; investir mais reserva o que foi investido.
 - **RF-52** Projeção dos próximos 12 meses: para cada mês, entradas previstas (templates), saídas previstas (fixas + parcelas + planejamentos), meta, sobra. Mostra o mês em que a sobra fica negativa.
-- **RF-53** O valor efetivamente aportado no mês (módulo Aporte → `contributions`) aparece no resumo como "Investido: R$ X de R$ meta".
+- **RF-53** O valor efetivamente investido no mês aparece no resumo como "Investido: R$ X de R$ meta". Hoje é informado à mão (`month_settings.goal_invested_cents`); na Fase 6 passa a vir também dos aportes (`contributions`).
 
 ## 7. Categorias e orçamento
 

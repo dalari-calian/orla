@@ -319,6 +319,8 @@ model MonthSettings {
   competenceMonth  DateTime  @map("competence_month") @db.Date
   /// null = usa a meta padrão do usuário.
   savingsGoalCents BigInt?   @map("savings_goal_cents")
+  /// Quanto da meta já foi investido no mês (a meta funciona como uma conta). null = nada.
+  goalInvestedCents BigInt?  @map("goal_invested_cents")
   notes            String?
   closedAt         DateTime? @map("closed_at") @db.Timestamptz(3)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)

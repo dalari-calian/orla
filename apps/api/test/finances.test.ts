@@ -307,6 +307,38 @@ describe('modelos recorrentes e o mês', () => {
     expect((await agent.get('/api/v1/months/2026-13')).status).toBe(404)
   })
 
+  it('meta como conta: o investido sai do saldo e a sobra continua reservando a meta', async () => {
+    await salary()
+    await agent.patch('/api/v1/months/2026-11/settings').send({ savingsGoalCents: 190000 })
+    const before = await month('2026-11')
+    expect(before.summary).toMatchObject({
+      goalInvestedCents: 0,
+      goalRemainingCents: 190000,
+      projectedSurplusCents: 600000 - 190000,
+    })
+
+    const partial = await agent
+      .patch('/api/v1/months/2026-11/settings')
+      .send({ goalInvestedCents: 100000 })
+    expect(partial.status).toBe(200)
+    expect(partial.body).toMatchObject({ savingsGoalCents: 190000, goalInvestedCents: 100000 })
+    const after = await month('2026-11')
+    expect(after.settings.goalInvestedCents).toBe(100000)
+    expect(after.summary).toMatchObject({
+      goalInvestedCents: 100000,
+      goalRemainingCents: 90000,
+      projectedSurplusCents: 600000 - 190000,
+      currentBalanceCents: before.summary.currentBalanceCents - 100000,
+    })
+
+    await agent.patch('/api/v1/months/2026-11/settings').send({ goalInvestedCents: null })
+    expect((await month('2026-11')).summary.goalInvestedCents).toBe(0)
+    const negative = await agent
+      .patch('/api/v1/months/2026-11/settings')
+      .send({ goalInvestedCents: -1 })
+    expect(negative.status).toBe(400)
+  })
+
   it('RF-22: planejamento com gastos vinculados', async () => {
     const planned = await expense({
       nature: 'planned',

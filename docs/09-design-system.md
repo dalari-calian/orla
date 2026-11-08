@@ -21,13 +21,13 @@ Traços a pegar dessas referências: **número herói** gigante no topo (saldo/p
 
 | token         | claro                | escuro                 | uso                               |
 | ------------- | -------------------- | ---------------------- | --------------------------------- |
-| `--bg`        | `#F2F2F7`            | `#000000`              | fundo da app (grouped background) |
-| `--surface`   | `#FFFFFF`            | `#1C1C1E`              | cartões, sheets                   |
-| `--surface-2` | `#F7F7FA`            | `#2C2C2E`              | campos, linhas alternadas         |
-| `--separator` | `rgba(60,60,67,.12)` | `rgba(84,84,88,.6)`    | divisores finos (0.5px em retina) |
-| `--text`      | `#000000`            | `#FFFFFF`              |                                   |
-| `--text-2`    | `rgba(60,60,67,.6)`  | `rgba(235,235,245,.6)` | secundário                        |
-| `--text-3`    | `rgba(60,60,67,.3)`  | `rgba(235,235,245,.3)` | placeholder                       |
+| `--bg`        | `#F2F2F7`            | `#1E1F23`              | fundo da app (grouped background) |
+| `--surface`   | `#FFFFFF`            | `#2A2B30`              | cartões, sheets                   |
+| `--surface-2` | `#F7F7FA`            | `#35363C`              | campos, linhas alternadas         |
+| `--separator` | `rgba(60,60,67,.12)` | `rgba(255,255,255,.09)` | divisores finos (0.5px em retina) |
+| `--text`      | `#000000`            | `#F2F2F5`              |                                   |
+| `--text-2`    | `rgba(60,60,67,.6)`  | `rgba(235,235,245,.64)` | secundário                        |
+| `--text-3`    | `rgba(60,60,67,.3)`  | `rgba(235,235,245,.34)` | placeholder                       |
 | `--accent`    | `#007AFF`            | `#0A84FF`              | ação primária, links, seleção     |
 | `--positive`  | `#34C759`            | `#30D158`              | ganho, receita, dentro da meta    |
 | `--negative`  | `#FF3B30`            | `#FF453A`              | perda, estouro                    |
@@ -82,7 +82,7 @@ Toda ação do usuário tem uma resposta visual: o app deve parecer vivo, mas **
 | Seções colapsáveis (`<details>`)                | altura anima ao abrir/fechar; chevron gira                  | `::details-content` + `interpolate-size` |
 | Segmented control                               | o fundo do item escolhido desliza até o novo (300 ms)       | indicador com `translateX`             |
 | Chip selecionado                                | cor e fundo com transição de 200 ms                         | `transition-colors`                    |
-| Trocar de aba no sheet de lançamento            | conteúdo desliza do lado da aba escolhida (56 px + fade, 320 ms) | `animate-slide-from-right/left`  |
+| Trocar de aba (sheet de lançamento, segmented control, chips de filtro) | conteúdo desliza do lado da aba escolhida (56 px + fade, 320 ms) | `<SlideSwap index>` / `animate-slide-from-right/left` |
 | Abrir seletor / calendário de mês               | o painel "desdobra" colado no campo (240 ms)                | `.attached-panel` + `@starting-style` |
 
 **Barra de rolagem:** fina e translúcida (estilo iOS), sem trilho nem setas, afastada das pontas para não quadrar cantos arredondados — global em `globals.css`. No `Sheet`, só o conteúdo rola; o título fica fixo.
@@ -106,7 +106,7 @@ Toda ação do usuário tem uma resposta visual: o app deve parecer vivo, mas **
 | `LargeTitle`                           | título estilo iOS que encolhe no scroll                                                                          |
 | `MonthSwitcher`                        | ◀ Novembro 2026 ▶, swipe lateral, toque abre a grade de meses (`MonthGrid`)                                      |
 | `MonthField`                           | campo de mês ◀ mês ▶ + grade de meses colada; modo "Automático" mostra o mês calculado (nunca `type="month"`)    |
-| `SelectField`                          | seletor próprio: a lista sai colada no campo, mesma cor, cantos arredondados só nas pontas; teclado completo   |
+| `SelectField`                          | seletor próprio: a lista sai colada no campo, mesma cor, cantos arredondados só nas pontas e a mesma sombra no campo e na lista (viram uma peça só); teclado completo   |
 | `Card`, `CardHeader`                   | superfície padrão                                                                                                |
 | `GroupedList`, `ListRow`               | lista inset agrupada (ícone em círculo, título, subtítulo, valor à direita, chevron); swipe actions no mobile    |
 | `Sheet`                                | bottom sheet no mobile (arrastável, Vaul), dialog central no desktop                                             |

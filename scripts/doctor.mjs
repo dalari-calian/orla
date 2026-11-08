@@ -14,9 +14,10 @@ const platform = process.platform // win32 | darwin | linux
 const isWindows = platform === 'win32'
 
 const results = []
-const ok = (label, detail = '') => results.push({ icon: '✅', label, detail })
-const fail = (label, detail, fix) => results.push({ icon: '❌', label, detail, fix, failed: true })
-const warn = (label, detail, fix) => results.push({ icon: '⚠️ ', label, detail, fix })
+const ok = (label, detail = '') => results.push({ icon: '[ ok ]', label, detail })
+const fail = (label, detail, fix) =>
+  results.push({ icon: '[erro]', label, detail, fix, failed: true })
+const warn = (label, detail, fix) => results.push({ icon: '[aviso]', label, detail, fix })
 
 /** Roda um comando fixo deste script (nunca entrada do usuário) e devolve a saída, ou null. */
 function run(command, args) {

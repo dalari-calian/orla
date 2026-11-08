@@ -51,6 +51,10 @@ No dia a dia, basta abrir o Docker Desktop e rodar `pnpm start` (ou `pnpm db:up`
 | `pnpm db:seed`        | Dados de exemplo                                       |
 | `pnpm db:studio`      | Prisma Studio (ver/editar dados no navegador)          |
 
+### App instalável (PWA)
+
+O service worker só existe no build de produção (no `pnpm dev` ele fica desligado para não atrapalhar a recarga). Para testar a instalação, com a API rodando: `pnpm build` e depois `pnpm --filter @orla/web preview` — no Chrome/Edge aparece o ícone de instalar na barra de endereço. No celular, a instalação exige HTTPS (ou seja, o deploy).
+
 ## Estrutura
 
 ```

@@ -94,9 +94,13 @@ export interface MonthSummary {
   expenseForecastCents: Cents
   expenseSettledCents: Cents
   savingsGoalCents: Cents
-  /** entradas previstas − saídas previstas − meta */
+  /** Quanto da meta já foi investido no mês (0 = nada ainda). */
+  goalInvestedCents: Cents
+  /** Quanto falta investir para cumprir a meta (0 = cumprida). */
+  goalRemainingCents: Cents
+  /** entradas previstas − saídas previstas − max(meta, investido) */
   projectedSurplusCents: Cents
-  /** entradas recebidas − saídas pagas */
+  /** entradas recebidas − saídas pagas − investido (a meta funciona como uma conta do mês) */
   currentBalanceCents: Cents
   /** Quanto ainda dá para gastar sem furar a meta (sobra prevista, se positiva). */
   freeToSpendCents: Cents
@@ -104,10 +108,20 @@ export interface MonthSummary {
   goalShortfallCents: Cents
 }
 
-/** RF-51: fórmulas do mês. */
+/**
+ * RF-51: fórmulas do mês. A meta de investimento é tratada como uma conta a pagar: reserva o
+ * valor inteiro na sobra prevista desde o começo do mês, e o que já foi investido sai do saldo.
+ * Investir menos que a meta não libera a diferença (continua "faltando investir"); investir
+ * mais reserva o que foi investido.
+ */
 export function computeMonthSummary(
   transactions: readonly SummaryTransaction[],
-  goal: { monthOverrideCents: Cents | null; defaultGoal: SavingsGoalSetting },
+  goal: {
+    monthOverrideCents: Cents | null
+    defaultGoal: SavingsGoalSetting
+    /** Quanto já foi investido no mês (null = nada registrado). */
+    investedCents?: Cents | null
+  },
 ): MonthSummary {
   const income = transactions.filter((item) => item.type === 'income')
   const expenses = transactions.filter((item) => item.type === 'expense')
@@ -136,15 +150,19 @@ export function computeMonthSummary(
     goal.defaultGoal,
     incomeForecastCents,
   )
-  const projectedSurplusCents = incomeForecastCents - expenseForecastCents - savingsGoalCents
+  const goalInvestedCents = goal.investedCents ?? 0
+  const reservedForGoal = Math.max(savingsGoalCents, goalInvestedCents)
+  const projectedSurplusCents = incomeForecastCents - expenseForecastCents - reservedForGoal
   return {
     incomeForecastCents,
     incomeSettledCents,
     expenseForecastCents,
     expenseSettledCents,
     savingsGoalCents,
+    goalInvestedCents,
+    goalRemainingCents: Math.max(savingsGoalCents - goalInvestedCents, 0),
     projectedSurplusCents,
-    currentBalanceCents: incomeSettledCents - expenseSettledCents,
+    currentBalanceCents: incomeSettledCents - expenseSettledCents - goalInvestedCents,
     freeToSpendCents: Math.max(projectedSurplusCents, 0),
     goalShortfallCents: Math.max(-projectedSurplusCents, 0),
   }

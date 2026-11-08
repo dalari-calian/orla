@@ -13,6 +13,7 @@ import { ChipGroup } from '@/components/ui/Chips'
 import { TextField } from '@/components/ui/Field'
 import { SelectField } from '@/components/ui/Select'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { categories, creditCards, payees } from '@/features/registrations/api'
 import { errorMessage } from '@/lib/api'
@@ -190,26 +191,28 @@ export function InstallmentPlanForm({
           ]}
         />
       )}
-      {onCredit &&
-        (cards.length > 0 ? (
-          <SelectField
-            label="Cartão"
-            value={creditCardId}
-            onChange={(event) => setCreditCardId(event.target.value)}
-            error={errors.creditCardId}
-          >
-            <option value="">Escolha o cartão</option>
-            {cards.map((card) => (
-              <option key={card.id} value={card.id}>
-                {card.name}
-              </option>
-            ))}
-          </SelectField>
-        ) : (
-          <p role="alert" className="px-1 text-footnote text-negative">
-            Cadastre um cartão em Configurações › Cartões, ou escolha boleto/carnê.
-          </p>
-        ))}
+      <SlideSwap index={onCredit ? 0 : 1}>
+        {onCredit &&
+          (cards.length > 0 ? (
+            <SelectField
+              label="Cartão"
+              value={creditCardId}
+              onChange={(event) => setCreditCardId(event.target.value)}
+              error={errors.creditCardId}
+            >
+              <option value="">Escolha o cartão</option>
+              {cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name}
+                </option>
+              ))}
+            </SelectField>
+          ) : (
+            <p role="alert" className="px-1 text-footnote text-negative">
+              Cadastre um cartão em Configurações › Cartões, ou escolha boleto/carnê.
+            </p>
+          ))}
+      </SlideSwap>
 
       <ChipGroup
         label="Categoria"

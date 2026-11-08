@@ -43,10 +43,10 @@ por desempenho.
 ## Script de verificação
 
 Na Fase 0, criar `scripts/doctor.mjs` (Node puro, sem dependências, para funcionar antes do
-`pnpm install`) que verifica todos os itens acima e imprime ✅/❌ com a instrução de correção.
+`pnpm install`) que verifica todos os itens acima e imprime `[ ok ]` / `[erro]` com a instrução de correção.
 Expor também como `pnpm doctor`. Rodar sempre que algo "parar de funcionar do nada".
 
 ## Ambiente pronto quando
 
-`node scripts/doctor.mjs` sem nenhum ❌, `pnpm db:up` sobe o Postgres, `pnpm dev` abre o app
+`node scripts/doctor.mjs` sem nenhum `[erro]`, `pnpm db:up` sobe o Postgres, `pnpm dev` abre o app
 em http://localhost:5173 e `pnpm test` passa.

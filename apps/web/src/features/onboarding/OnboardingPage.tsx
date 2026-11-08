@@ -10,6 +10,7 @@ import { TextField } from '@/components/ui/Field'
 import { SelectField } from '@/components/ui/Select'
 import { GroupedList, ListRow } from '@/components/ui/GroupedList'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Sheet } from '@/components/ui/Sheet'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -392,17 +393,19 @@ function GoalStep({
           { value: 'percent', label: '% da renda' },
         ]}
       />
-      {mode === 'fixed' ? (
-        <MoneyInput label="Meta mensal" value={amount} onChange={setAmount} large />
-      ) : (
-        <TextField
-          label="Percentual das receitas do mês"
-          inputMode="decimal"
-          value={percent}
-          onChange={(event) => setPercent(event.target.value)}
-          trailing={<span className="pr-3 text-body text-text-2">%</span>}
-        />
-      )}
+      <SlideSwap index={mode === 'fixed' ? 0 : 1}>
+        {mode === 'fixed' ? (
+          <MoneyInput label="Meta mensal" value={amount} onChange={setAmount} large />
+        ) : (
+          <TextField
+            label="Percentual das receitas do mês"
+            inputMode="decimal"
+            value={percent}
+            onChange={(event) => setPercent(event.target.value)}
+            trailing={<span className="pr-3 text-body text-text-2">%</span>}
+          />
+        )}
+      </SlideSwap>
       {(error !== null || finishError != null) && (
         <p role="alert" className="text-footnote text-negative">
           {error ?? errorMessage(finishError)}

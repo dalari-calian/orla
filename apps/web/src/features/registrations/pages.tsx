@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { categoryIcons } from '@/components/ui/CategoryIcon'
 import { inputClass } from '@/components/ui/Field'
 import { GroupedList, ListRow } from '@/components/ui/GroupedList'
+import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Sheet } from '@/components/ui/Sheet'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -354,52 +355,54 @@ export function CategoriesPage() {
           ]}
         />
       </div>
-      <ListStates
-        query={list}
-        items={ofKind}
-        empty={
-          <EmptyState
-            icon={Tags}
-            title="Nenhuma categoria"
-            description="Categorias organizam seus gastos e receitas nos gráficos."
-            action={<Button onClick={() => setEditing('new')}>Adicionar categoria</Button>}
-          />
-        }
-      >
-        {() => (
-          <GroupedList>
-            {topLevel.flatMap((parent) => [
-              <ListRow
-                key={parent.id}
-                icon={categoryIcons[parent.icon]}
-                iconColor={parent.color}
-                title={parent.name}
-                value={
-                  parent.monthlyBudgetCents !== null
-                    ? `Teto ${formatBRL(parent.monthlyBudgetCents)}`
-                    : undefined
-                }
-                onClick={() => setEditing(parent)}
-              />,
-              ...childrenOf(parent.id).map((child) => (
+      <SlideSwap index={kind === 'expense' ? 0 : 1}>
+        <ListStates
+          query={list}
+          items={ofKind}
+          empty={
+            <EmptyState
+              icon={Tags}
+              title="Nenhuma categoria"
+              description="Categorias organizam seus gastos e receitas nos gráficos."
+              action={<Button onClick={() => setEditing('new')}>Adicionar categoria</Button>}
+            />
+          }
+        >
+          {() => (
+            <GroupedList>
+              {topLevel.flatMap((parent) => [
                 <ListRow
-                  key={child.id}
-                  indent
-                  icon={categoryIcons[child.icon]}
-                  iconColor={child.color}
-                  title={child.name}
+                  key={parent.id}
+                  icon={categoryIcons[parent.icon]}
+                  iconColor={parent.color}
+                  title={parent.name}
                   value={
-                    child.monthlyBudgetCents !== null
-                      ? `Teto ${formatBRL(child.monthlyBudgetCents)}`
+                    parent.monthlyBudgetCents !== null
+                      ? `Teto ${formatBRL(parent.monthlyBudgetCents)}`
                       : undefined
                   }
-                  onClick={() => setEditing(child)}
-                />
-              )),
-            ])}
-          </GroupedList>
-        )}
-      </ListStates>
+                  onClick={() => setEditing(parent)}
+                />,
+                ...childrenOf(parent.id).map((child) => (
+                  <ListRow
+                    key={child.id}
+                    indent
+                    icon={categoryIcons[child.icon]}
+                    iconColor={child.color}
+                    title={child.name}
+                    value={
+                      child.monthlyBudgetCents !== null
+                        ? `Teto ${formatBRL(child.monthlyBudgetCents)}`
+                        : undefined
+                    }
+                    onClick={() => setEditing(child)}
+                  />
+                )),
+              ])}
+            </GroupedList>
+          )}
+        </ListStates>
+      </SlideSwap>
 
       <Sheet
         open={editing !== null}

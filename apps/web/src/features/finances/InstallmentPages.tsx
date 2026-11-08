@@ -1,6 +1,6 @@
 import { todayIsoDate } from '@orla/core'
 import { formatBRL } from '@orla/core/money'
-import type { InstallmentPlan, InstallmentSummary } from '@orla/contracts'
+import type { InstallmentPlan, InstallmentSummary, Transaction } from '@orla/contracts'
 import { CalendarRange, Check, Circle, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -8,8 +8,10 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { AnimatedMoney } from '@/components/ui/AnimatedMoney'
 import { Card, CardHeader } from '@/components/ui/Card'
+import { ProgressBar } from '@/components/ui/Progress'
 import { TextField } from '@/components/ui/Field'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Sheet } from '@/components/ui/Sheet'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -19,6 +21,7 @@ import { errorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import {
   useInstallmentPlan,
+  useTransactionMutations,
   useInstallmentPlanMutations,
   useInstallmentPlans,
   useInstallmentSummary,
@@ -29,23 +32,6 @@ import { InstallmentPlanForm } from './InstallmentPlanForm'
 import { shortDate, shortMonthLabel } from './labels'
 
 const backToFinances = { to: '/financas', label: 'Finanças' }
-
-function ProgressBar({ value, className }: { value: number; className?: string }) {
-  return (
-    <div
-      className={cn('h-2 overflow-hidden rounded-full bg-surface-2', className)}
-      role="progressbar"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(value * 100)}
-    >
-      <div
-        className="h-full origin-left animate-grow-x rounded-full bg-accent transition-[width] duration-500 ease-ios"
-        style={{ width: `${Math.min(100, Math.max(0, value * 100))}%` }}
-      />
-    </div>
-  )
-}
 
 /** RF-45: "Para quitar tudo" + compromisso mensal em barras ("livre em ago/2027"). */
 function SummaryHero({ summary }: { summary: InstallmentSummary }) {
@@ -203,50 +189,114 @@ export function InstallmentPlansPage() {
               { value: 'finished', label: 'Finalizados' },
             ]}
           />
-          {list.isPending ? (
-            <div className="space-y-3">
-              <Skeleton className="h-32 rounded-card" />
-              <Skeleton className="h-32 rounded-card" />
-            </div>
-          ) : list.isError ? (
-            <Card>
-              <ErrorState
-                description={errorMessage(list.error)}
-                onRetry={() => void list.refetch()}
-              />
-            </Card>
-          ) : list.data.length === 0 ? (
-            <Card className="p-0 md:p-0">
-              <EmptyState
-                icon={CalendarRange}
-                title={filter === 'active' ? 'Nenhum parcelamento ativo' : 'Nada finalizado ainda'}
-                description={
-                  filter === 'active'
-                    ? 'Cadastre compras parceladas e veja quanto falta para quitar tudo.'
-                    : undefined
-                }
-                action={
-                  filter === 'active' && (
-                    <Button onClick={() => openNew('installment')}>Novo parcelamento</Button>
-                  )
-                }
-              />
-            </Card>
-          ) : (
-            <div className="grid animate-fade-in gap-3 xl:grid-cols-2">
-              {list.data.map((plan) => (
-                <PlanCard
-                  key={plan.id}
-                  plan={plan}
-                  cardName={plan.creditCardId ? cardName.get(plan.creditCardId) : undefined}
-                  payeeName={plan.payeeId ? payeeName.get(plan.payeeId) : undefined}
+          <SlideSwap index={filter === 'active' ? 0 : 1}>
+            {list.isPending ? (
+              <div className="space-y-3">
+                <Skeleton className="h-32 rounded-card" />
+                <Skeleton className="h-32 rounded-card" />
+              </div>
+            ) : list.isError ? (
+              <Card>
+                <ErrorState
+                  description={errorMessage(list.error)}
+                  onRetry={() => void list.refetch()}
                 />
-              ))}
-            </div>
-          )}
+              </Card>
+            ) : list.data.length === 0 ? (
+              <Card className="p-0 md:p-0">
+                <EmptyState
+                  icon={CalendarRange}
+                  title={
+                    filter === 'active' ? 'Nenhum parcelamento ativo' : 'Nada finalizado ainda'
+                  }
+                  description={
+                    filter === 'active'
+                      ? 'Cadastre compras parceladas e veja quanto falta para quitar tudo.'
+                      : undefined
+                  }
+                  action={
+                    filter === 'active' && (
+                      <Button onClick={() => openNew('installment')}>Novo parcelamento</Button>
+                    )
+                  }
+                />
+              </Card>
+            ) : (
+              <div className="grid animate-fade-in gap-3 xl:grid-cols-2">
+                {list.data.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    cardName={plan.creditCardId ? cardName.get(plan.creditCardId) : undefined}
+                    payeeName={plan.payeeId ? payeeName.get(plan.payeeId) : undefined}
+                  />
+                ))}
+              </div>
+            )}
+          </SlideSwap>
         </div>
       </div>
     </>
+  )
+}
+
+/**
+ * Marca uma parcela como paga (ou volta para prevista) direto na lista do parcelamento:
+ * útil para registrar parcelas que já foram pagas antes de cadastrar a compra.
+ */
+function InstallmentCheck({
+  item,
+  label,
+  editable,
+}: {
+  item: Transaction
+  label: string
+  editable: boolean
+}) {
+  const { settle, unsettle } = useTransactionMutations()
+  const toast = useToast()
+  const [toggled, setToggled] = useState(false)
+  const settled = item.status === 'settled'
+  const busy = settle.isPending || unsettle.isPending
+  const mark = (
+    <span
+      className={cn(
+        'flex size-6 items-center justify-center rounded-full bg-positive text-white',
+        toggled && 'animate-pop',
+      )}
+    >
+      <Check className="size-4" strokeWidth={3} aria-hidden />
+    </span>
+  )
+  const empty = <Circle className="size-6" strokeWidth={1.75} aria-hidden />
+
+  if (!editable) {
+    return (
+      <span
+        className="flex size-6 shrink-0 items-center justify-center text-text-3"
+        aria-label={settled ? 'Paga' : 'Prevista'}
+      >
+        {settled ? mark : empty}
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      aria-pressed={settled}
+      aria-label={
+        settled ? `Marcar a parcela ${label} como prevista` : `Marcar a parcela ${label} como paga`
+      }
+      onClick={() => {
+        setToggled(true)
+        const done = settled ? unsettle.mutateAsync(item.id) : settle.mutateAsync({ id: item.id })
+        done.catch((error: unknown) => toast({ message: errorMessage(error), tone: 'error' }))
+      }}
+      className="press -m-3 flex size-12 shrink-0 items-center justify-center text-text-3 hover:text-accent disabled:opacity-50"
+    >
+      {settled ? mark : empty}
+    </button>
   )
 }
 
@@ -421,20 +471,17 @@ export function InstallmentPlanDetailPage() {
               <li
                 key={item.id}
                 className={cn(
-                  'flex min-h-14 items-center gap-3 px-4 md:px-5 [&+li]:border-t [&+li]:border-separator',
+                  'flex min-h-14 items-center gap-3 px-4 transition-colors md:px-5 [&+li]:border-t [&+li]:border-separator',
+                  active && item.installmentNumber !== null && 'hover:bg-surface-2',
                   item.competenceMonth === indicators.lastCompetenceMonth && 'pb-1',
                 )}
               >
-                {item.status === 'settled' ? (
-                  <span
-                    className="flex size-6 items-center justify-center rounded-full bg-positive text-white"
-                    aria-label="Paga"
-                  >
-                    <Check className="size-4" strokeWidth={3} aria-hidden />
-                  </span>
-                ) : (
-                  <Circle className="size-6 text-text-3" strokeWidth={1.75} aria-label="Prevista" />
-                )}
+                <InstallmentCheck
+                  item={item}
+                  label={`${item.installmentNumber ?? ''}/${plan.installmentsCount}`}
+                  // Só dá para marcar/desmarcar parcelas de um parcelamento ativo (a quitação é fixa).
+                  editable={active && item.installmentNumber !== null}
+                />
                 <span className="w-14 shrink-0 text-subhead font-medium tabular">
                   {item.installmentNumber
                     ? `${item.installmentNumber}/${plan.installmentsCount}`

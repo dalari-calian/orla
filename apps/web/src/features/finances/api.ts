@@ -1,5 +1,9 @@
 import {
   cardStatementSchema,
+  dashboardResponseSchema,
+  projectionResponseSchema,
+  upcomingResponseSchema,
+  type DashboardPeriod,
   installmentPlanDetailSchema,
   installmentPlanSchema,
   installmentSummarySchema,
@@ -33,6 +37,9 @@ const financeKeys = [
   'statement',
   'installment-plans',
   'recurring-templates',
+  'dashboard',
+  'projection',
+  'upcoming',
 ]
 
 export function invalidateFinances(queryClient: QueryClient): Promise<void> {
@@ -62,6 +69,50 @@ export function useUpdateMonthSettings(month: string) {
     mutationFn: (input: UpdateMonthSettingsRequest) =>
       api.patch(`/months/${month}/settings`, monthSettingsResponseSchema, input),
     onSettled,
+  })
+}
+
+// ─── Dashboard, projeção e vencimentos (Fase 3) ──────────────────────────────
+
+export function useDashboard(month: string, period: DashboardPeriod) {
+  return useQuery({
+    queryKey: ['dashboard', month, period],
+    queryFn: ({ signal }) =>
+      api.get(`/months/${month}/dashboard?period=${period}`, dashboardResponseSchema, signal),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useProjection(from?: string) {
+  return useQuery({
+    queryKey: ['projection', from ?? 'current'],
+    queryFn: ({ signal }) =>
+      api.get(
+        from ? `/projection?from=${from}&months=12` : '/projection?months=12',
+        projectionResponseSchema,
+        signal,
+      ),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useUpcoming(days = 7) {
+  return useQuery({
+    queryKey: ['upcoming', days],
+    queryFn: ({ signal }) => api.get(`/upcoming?days=${days}`, upcomingResponseSchema, signal),
+  })
+}
+
+/** Últimos lançamentos realizados (Início). */
+export function useRecentTransactions(limit = 5) {
+  return useQuery({
+    queryKey: ['transactions', 'recent', limit],
+    queryFn: ({ signal }) =>
+      api.get(
+        `/transactions?status=settled&limit=${limit}`,
+        listResponseSchema(transactionSchema),
+        signal,
+      ),
   })
 }
 

@@ -13,7 +13,7 @@ function run(label, command) {
   try {
     execSync(command, { cwd: root, stdio: 'inherit' })
   } catch {
-    console.error(`\n✖ Falhou em: ${label}`)
+    console.error(`\nErro: Falhou em: ${label}`)
     process.exit(1)
   }
 }
@@ -27,7 +27,7 @@ try {
   execSync('docker info', { cwd: root, stdio: 'ignore' })
 } catch {
   console.error(
-    '\n✖ O Docker não está rodando. Abra o Docker Desktop, espere iniciar e rode de novo.',
+    '\nErro: O Docker não está rodando. Abra o Docker Desktop, espere iniciar e rode de novo.',
   )
   process.exit(1)
 }

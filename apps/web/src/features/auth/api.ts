@@ -22,6 +22,8 @@ export function switchSession(queryClient: QueryClient, me: MeResponse | null): 
   void queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] })
   queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] })
   queryClient.setQueryData(meQueryKey, me)
+  // Leitura offline (PWA): as respostas da API guardadas são do usuário anterior.
+  if (typeof caches !== 'undefined') void caches.delete('orla-api').catch(() => undefined)
 }
 
 /** Usuário logado; `null` quando não há sessão (401). */

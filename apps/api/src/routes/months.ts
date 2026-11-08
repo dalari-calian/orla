@@ -54,14 +54,17 @@ export function monthsRouter(prisma: PrismaClient): Router {
 
     const transactions = rows.map(toTransaction)
     const monthGoal = centsToNumber(monthSettings?.savingsGoalCents ?? null)
+    const invested = centsToNumber(monthSettings?.goalInvestedCents ?? null)
     const body: MonthResponse = {
       month,
       summary: computeMonthSummary(transactions, {
         monthOverrideCents: monthGoal,
         defaultGoal: settings.savingsGoal,
+        investedCents: invested,
       }),
       settings: {
         savingsGoalCents: monthGoal,
+        goalInvestedCents: invested,
         defaultSavingsGoal: settings.savingsGoal as SavingsGoal,
         notes: monthSettings?.notes ?? null,
       },
@@ -79,6 +82,10 @@ export function monthsRouter(prisma: PrismaClient): Router {
       ...(input.savingsGoalCents !== undefined && {
         savingsGoalCents: input.savingsGoalCents === null ? null : BigInt(input.savingsGoalCents),
       }),
+      ...(input.goalInvestedCents !== undefined && {
+        goalInvestedCents:
+          input.goalInvestedCents === null ? null : BigInt(input.goalInvestedCents),
+      }),
       ...(input.notes !== undefined && { notes: input.notes }),
     }
     const row = await prisma.monthSettings.upsert({
@@ -88,6 +95,7 @@ export function monthsRouter(prisma: PrismaClient): Router {
     })
     const body: MonthSettingsResponse = {
       savingsGoalCents: centsToNumber(row.savingsGoalCents),
+      goalInvestedCents: centsToNumber(row.goalInvestedCents),
       notes: row.notes,
     }
     res.json(body)

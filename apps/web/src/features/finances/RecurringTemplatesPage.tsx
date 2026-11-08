@@ -17,6 +17,7 @@ import { MonthField } from '@/components/ui/MonthField'
 import { SelectField } from '@/components/ui/Select'
 import { GroupedList, ListRow } from '@/components/ui/GroupedList'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Sheet } from '@/components/ui/Sheet'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -38,16 +39,20 @@ function describe(template: RecurringTemplate): string {
   return `${when} · desde ${shortMonthLabel(template.startMonth)}${until}${template.isActive ? '' : ' · pausado'}`
 }
 
-type Kind = 'income' | 'fixed' | 'planned'
+export type RecurringKind = 'income' | 'fixed' | 'planned'
+type Kind = RecurringKind
 
-function TemplateForm({
+export function TemplateForm({
   initial,
+  initialKind = 'fixed',
   submitting,
   error,
   onSubmit,
   extra,
 }: {
   initial?: RecurringTemplate | undefined
+  /** Tipo já escolhido ao abrir um modelo novo (atalhos do Início e de Finanças). */
+  initialKind?: Kind
   submitting: boolean
   error: unknown
   onSubmit: (
@@ -67,7 +72,7 @@ function TemplateForm({
         : initial.nature === 'planned'
           ? 'planned'
           : 'fixed'
-      : 'fixed',
+      : initialKind,
   )
   const type = kind === 'income' ? 'income' : 'expense'
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -152,116 +157,121 @@ function TemplateForm({
           ]}
         />
       )}
-      <MoneyInput
-        label={kind === 'income' ? 'Valor (média)' : 'Valor'}
-        value={amountCents}
-        onChange={setAmountCents}
-        error={errors.amountCents}
-        large
-      />
-      <TextField
-        label="Descrição"
-        placeholder={
-          kind === 'income'
-            ? 'Ex.: Salário'
-            : kind === 'planned'
-              ? 'Ex.: Aniversário'
-              : 'Ex.: Aluguel'
-        }
-        value={description}
-        onChange={(event) => setDescription(event.target.value)}
-        error={errors.description}
-        autoComplete="off"
-      />
-      <SegmentedControl
-        label="Frequência"
-        value={frequency}
-        onChange={setFrequency}
-        options={[
-          { value: 'monthly', label: 'Todo mês' },
-          { value: 'yearly', label: 'Todo ano' },
-        ]}
-      />
-      <div className="grid grid-cols-2 gap-3">
-        {frequency === 'yearly' && (
+      <SlideSwap index={['income', 'fixed', 'planned'].indexOf(kind)} className="space-y-4">
+        <MoneyInput
+          label={kind === 'income' ? 'Valor (média)' : 'Valor'}
+          value={amountCents}
+          onChange={setAmountCents}
+          error={errors.amountCents}
+          large
+        />
+        <TextField
+          label="Descrição"
+          placeholder={
+            kind === 'income'
+              ? 'Ex.: Salário'
+              : kind === 'planned'
+                ? 'Ex.: Aniversário'
+                : 'Ex.: Aluguel'
+          }
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          error={errors.description}
+          autoComplete="off"
+        />
+        <SegmentedControl
+          label="Frequência"
+          value={frequency}
+          onChange={setFrequency}
+          options={[
+            { value: 'monthly', label: 'Todo mês' },
+            { value: 'yearly', label: 'Todo ano' },
+          ]}
+        />
+        <SlideSwap index={frequency === 'monthly' ? 0 : 1} className="grid grid-cols-2 gap-3">
+          {frequency === 'yearly' && (
+            <SelectField
+              label="Mês"
+              value={monthOfYear}
+              onChange={(event) => setMonthOfYear(event.target.value)}
+              error={errors.monthOfYear}
+            >
+              {monthNames.map((name, index) => (
+                <option key={name} value={index + 1}>
+                  {name}
+                </option>
+              ))}
+            </SelectField>
+          )}
+          <TextField
+            label="Dia"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={31}
+            value={day}
+            onChange={(event) => setDay(event.target.value)}
+            error={errors.dayOfMonth}
+          />
+        </SlideSwap>
+        <ChipGroup
+          label="Categoria"
+          allowClear
+          value={categoryId}
+          onChange={setCategoryId}
+          error={errors.categoryId}
+          options={options.map(({ category, label }) => ({
+            value: category.id,
+            label,
+            icon: categoryIcons[category.icon],
+            color: category.color,
+          }))}
+        />
+        {type === 'expense' && (
+          <ChipGroup
+            label="Forma de pagamento"
+            allowClear
+            value={paymentMethod}
+            onChange={setPaymentMethod}
+            error={errors.paymentMethod}
+            options={methods.map((method) => ({
+              value: method,
+              label: paymentMethodLabels[method],
+            }))}
+          />
+        )}
+        {isCredit ? (
           <SelectField
-            label="Mês"
-            value={monthOfYear}
-            onChange={(event) => setMonthOfYear(event.target.value)}
-            error={errors.monthOfYear}
+            label="Cartão"
+            value={creditCardId}
+            onChange={(event) => setCreditCardId(event.target.value)}
+            error={errors.creditCardId}
           >
-            {monthNames.map((name, index) => (
-              <option key={name} value={index + 1}>
-                {name}
+            <option value="">Escolha o cartão</option>
+            {(cardList.data ?? []).map((card) => (
+              <option key={card.id} value={card.id}>
+                {card.name}
               </option>
             ))}
           </SelectField>
+        ) : (
+          <SelectField
+            label={type === 'income' ? 'Conta onde entra' : 'Conta de onde sai'}
+            value={accountId}
+            onChange={(event) => setAccountId(event.target.value)}
+            error={errors.accountId}
+          >
+            <option value="">Não informar</option>
+            {(accountList.data ?? [])
+              .filter((account) => !account.isArchived || account.id === accountId)
+              .map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+          </SelectField>
         )}
-        <TextField
-          label="Dia"
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={31}
-          value={day}
-          onChange={(event) => setDay(event.target.value)}
-          error={errors.dayOfMonth}
-        />
-      </div>
-      <ChipGroup
-        label="Categoria"
-        allowClear
-        value={categoryId}
-        onChange={setCategoryId}
-        error={errors.categoryId}
-        options={options.map(({ category, label }) => ({
-          value: category.id,
-          label,
-          icon: categoryIcons[category.icon],
-          color: category.color,
-        }))}
-      />
-      {type === 'expense' && (
-        <ChipGroup
-          label="Forma de pagamento"
-          allowClear
-          value={paymentMethod}
-          onChange={setPaymentMethod}
-          error={errors.paymentMethod}
-          options={methods.map((method) => ({ value: method, label: paymentMethodLabels[method] }))}
-        />
-      )}
-      {isCredit ? (
-        <SelectField
-          label="Cartão"
-          value={creditCardId}
-          onChange={(event) => setCreditCardId(event.target.value)}
-          error={errors.creditCardId}
-        >
-          <option value="">Escolha o cartão</option>
-          {(cardList.data ?? []).map((card) => (
-            <option key={card.id} value={card.id}>
-              {card.name}
-            </option>
-          ))}
-        </SelectField>
-      ) : (
-        <SelectField
-          label={type === 'income' ? 'Conta onde entra' : 'Conta de onde sai'}
-          value={accountId}
-          onChange={(event) => setAccountId(event.target.value)}
-          error={errors.accountId}
-        >
-          <option value="">Não informar</option>
-          {(accountList.data ?? [])
-            .filter((account) => !account.isArchived || account.id === accountId)
-            .map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-        </SelectField>
-      )}
+      </SlideSwap>
       <MonthField
         label="Começa em"
         value={startMonth}

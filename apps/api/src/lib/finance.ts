@@ -156,6 +156,18 @@ export async function financeSettings(db: Db, userId: string): Promise<FinanceSe
 
 // ─── Materialização dos modelos recorrentes (RF-11) ──────────────────────────
 
+type TemplateRow = Prisma.RecurringTemplateGetPayload<object>
+
+/** Linha do modelo → regra de recorrência do core (meses como `YYYY-MM`). */
+export function templateRule(template: TemplateRow) {
+  return {
+    ...template,
+    frequency: template.frequency === 'yearly' ? ('yearly' as const) : ('monthly' as const),
+    startMonth: dateToCompetenceMonth(template.startMonth),
+    endMonth: template.endMonth ? dateToCompetenceMonth(template.endMonth) : null,
+  }
+}
+
 /**
  * Cria os lançamentos previstos dos modelos ativos que ainda não têm lançamento no mês.
  * Idempotente: o índice único (modelo, mês) + `skipDuplicates` cobrem requisições em paralelo,
@@ -177,13 +189,7 @@ export async function materializeMonth(db: Db, userId: string, month: string): P
     select: { recurringTemplateId: true },
   })
   const generated = new Set(existing.map((row) => row.recurringTemplateId ?? ''))
-  const rules = templates.map((template) => ({
-    ...template,
-    frequency: template.frequency === 'yearly' ? ('yearly' as const) : ('monthly' as const),
-    startMonth: dateToCompetenceMonth(template.startMonth),
-    endMonth: template.endMonth ? dateToCompetenceMonth(template.endMonth) : null,
-  }))
-  const missing = templatesToMaterialize(rules, month, generated)
+  const missing = templatesToMaterialize(templates.map(templateRule), month, generated)
   if (missing.length === 0) return
 
   await db.transaction.createMany({

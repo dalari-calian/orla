@@ -45,7 +45,7 @@ function Shell() {
     <div className="min-h-dvh">
       <Sidebar onNewEntry={openNewEntry} />
 
-      <main className="px-4 pb-[calc(88px+env(safe-area-inset-bottom))] lg:pb-12 lg:pl-68 lg:pr-8 xl:pr-10">
+      <main className="overflow-x-clip px-4 pb-[calc(88px+env(safe-area-inset-bottom))] lg:pb-12 lg:pl-68 lg:pr-8 xl:pr-10">
         <div className="mx-auto w-full max-w-[1200px]">
           {/* Cada tela entra com um fade curto (doc 09 › Movimento). */}
           <div key={pathname} className="animate-enter">
