@@ -164,7 +164,7 @@ interface PriceChoice {
 }
 
 /** Preço exibido: saldo informado (manual) ou o mais recente entre cotação e preço à mão (RC-33). */
-function choosePrice(asset: AssetRow, quote: QuoteRow | undefined): PriceChoice {
+export function choosePrice(asset: AssetRow, quote: QuoteRow | undefined): PriceChoice {
   if (asset.quoteMode === 'manual' && asset.manualValueCents !== null) {
     return {
       price: null,

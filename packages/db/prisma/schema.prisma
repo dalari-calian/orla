@@ -44,6 +44,7 @@ model User {
   feedback           Feedback[]
   contributionPlans  ContributionPlan[]
   contributions      Contribution[]
+  balances           Balance[]
 
   @@map("users")
 }
@@ -679,4 +680,61 @@ model Contribution {
 
   @@index([userId, competenceMonth])
   @@map("contributions")
+}
+
+// ─── Balanço (Fase 7, docs/07) ──────────────────────────────────────────────
+
+/// Fechamento congelado do patrimônio num dia (o "balanço mensal" da planilha).
+model Balance {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  referenceDate      DateTime  @map("reference_date") @db.Date
+  /// Um balanço por mês (índice parcial único, ignorando excluídos).
+  competenceMonth    DateTime  @map("competence_month") @db.Date
+  totalCents         BigInt    @map("total_cents")
+  /// Aportes do período, congelados no fechamento (null em rascunho).
+  contributionsCents BigInt?   @map("contributions_cents")
+  /// Proventos do período, congelados no fechamento (null em rascunho).
+  dividendsCents     BigInt?   @map("dividends_cents")
+  notes              String?
+  /// draft · closed
+  status             String    @default("draft")
+  closedAt           DateTime? @map("closed_at") @db.Timestamptz(3)
+  /// manual · import
+  source             String    @default("manual")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items BalanceItem[]
+
+  @@index([userId, referenceDate])
+  @@map("balances")
+}
+
+/// Linha do balanço: um ativo (qtd × preço ou saldo) ou o saldo em conta de uma corretora.
+model BalanceItem {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  balanceId    String   @map("balance_id") @db.Uuid
+  /// asset · cash
+  kind         String
+  assetId      String?  @map("asset_id") @db.Uuid
+  assetClassId String?  @map("asset_class_id") @db.Uuid
+  accountId    String?  @map("account_id") @db.Uuid
+  /// Nome congelado (ticker ou nome do ativo; corretora no saldo em conta).
+  label        String
+  ticker       String?
+  quantity     Decimal? @db.Decimal(20, 8)
+  price        Decimal? @db.Decimal(20, 8)
+  valueCents   BigInt   @map("value_cents")
+  dy           Decimal? @db.Decimal(10, 4)
+  pvp          Decimal? @db.Decimal(10, 4)
+  sortOrder    Int      @default(0) @map("sort_order")
+
+  balance Balance @relation(fields: [balanceId], references: [id], onDelete: Cascade)
+
+  @@index([balanceId, sortOrder])
+  @@index([ticker])
+  @@map("balance_items")
 }

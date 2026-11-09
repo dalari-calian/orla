@@ -125,6 +125,22 @@ export interface DividendDraft {
   amountCents: Cents
 }
 
+/** Balanço histórico (Fase 7): entra fechado, um por mês. */
+export interface BalanceDraft {
+  kind: 'balance'
+  competenceMonth: string
+  referenceDate: IsoDate
+  items: { asset: AssetRef; quantity: string | null; price: string | null; valueCents: Cents }[]
+}
+
+/** Aporte externo (dinheiro novo na carteira), base da rentabilidade real. */
+export interface ContributionDraft {
+  kind: 'contribution'
+  date: IsoDate
+  amountCents: Cents
+  notes: string | null
+}
+
 export type ImportDraft =
   | TransactionDraft
   | InstallmentPlanDraft
@@ -133,6 +149,8 @@ export type ImportDraft =
   | AssetDraft
   | AssetTradeDraft
   | DividendDraft
+  | BalanceDraft
+  | ContributionDraft
 
 /** Uma linha (ou grupo de linhas) do arquivo já interpretada, pronta para a pré-visualização. */
 export interface ParsedImportRow {

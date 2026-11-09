@@ -11,6 +11,7 @@ import {
   Plus,
   Receipt,
   ReceiptText,
+  Scale,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -23,6 +24,7 @@ import { GroupedList, ListRow } from '@/components/ui/GroupedList'
 import { ProgressBar } from '@/components/ui/Progress'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { useMe } from '@/features/auth/api'
+import { useBalances } from '@/features/balance/api'
 import { useInstallmentSummary, useMonth, useRecentTransactions } from '@/features/finances/api'
 import { useEntrySheet } from '@/features/finances/EntrySheet'
 import { shortDate, shortMonthLabel } from '@/features/finances/labels'
@@ -30,6 +32,7 @@ import { NewRecurringSheet } from '@/features/finances/NewRecurringSheet'
 import type { RecurringKind } from '@/features/finances/RecurringTemplatesPage'
 import { UpcomingList } from '@/features/finances/Upcoming'
 import { usePortfolio } from '@/features/portfolio/api'
+import { formatPercent } from '@/features/portfolio/labels'
 import { categories } from '@/features/registrations/api'
 import { errorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -117,6 +120,7 @@ function Shortcut({
   to,
   onClick,
   wide = false,
+  highlight = false,
 }: {
   icon: LucideIcon
   label: string
@@ -124,10 +128,13 @@ function Shortcut({
   onClick?: () => void
   /** Ocupa a linha inteira da grade. */
   wide?: boolean
+  /** Destaque (ex.: balanço do mês ainda não feito). */
+  highlight?: boolean
 }) {
   const className = cn(
     'press flex min-h-20 flex-col items-start justify-between gap-2 rounded-card bg-surface-2 p-3 text-left text-subhead font-medium',
     wide && 'col-span-2',
+    highlight && 'bg-accent text-white [&_svg]:text-white',
   )
   const content = (
     <>
@@ -153,6 +160,10 @@ function Shortcut({
 function Shortcuts() {
   const { openNew } = useEntrySheet()
   const [recurringKind, setRecurringKind] = useState<RecurringKind | null>(null)
+  const balances = useBalances()
+  const currentMonth = currentCompetenceMonth()
+  // Sem resposta ainda: não destaca (evita piscar).
+  const balanceDone = balances.data?.currentMonthDone ?? true
   return (
     <Card>
       <CardHeader title="Atalhos" />
@@ -171,7 +182,13 @@ function Shortcuts() {
         />
         <Shortcut icon={LayoutDashboard} label="Dashboard" to="/financas/dashboard" />
         <Shortcut icon={ChartLine} label="Projeção" to="/financas/projecao" />
-        <Shortcut icon={PiggyBank} label="Simular aporte" to="/aporte" wide />
+        <Shortcut icon={PiggyBank} label="Simular aporte" to="/aporte" />
+        <Shortcut
+          icon={Scale}
+          label={balanceDone ? 'Balanço' : `Fazer balanço de ${shortMonthLabel(currentMonth)}`}
+          to={`/balanco/${currentMonth}`}
+          highlight={!balanceDone}
+        />
       </div>
       <NewRecurringSheet kind={recurringKind} onClose={() => setRecurringKind(null)} />
     </Card>
@@ -200,6 +217,8 @@ function ListCard({
 /** 3. Patrimônio (Carteira): valor total e resultado, das cotações em cache. */
 function WealthCard() {
   const query = usePortfolio()
+  const balances = useBalances()
+  const year = balances.data?.years.at(-1)
   return (
     <Card>
       <CardHeader
@@ -226,6 +245,16 @@ function WealthCard() {
           <p className="text-title-2 font-semibold tabular">
             {formatBRL(query.data.totals.valueCents)}
           </p>
+          {year && (
+            <p className="text-footnote tabular">
+              <span className="text-text-2">Ganho real em {year.year}: </span>
+              <span className={cn(year.gainCents >= 0 ? 'text-positive' : 'text-negative')}>
+                {year.gainCents >= 0 ? '+' : '−'}
+                {formatBRL(Math.abs(year.gainCents))}
+                {year.twr !== null && ` (${formatPercent(year.twr, true)})`}
+              </span>
+            </p>
+          )}
           <p
             className={cn(
               'text-footnote tabular',

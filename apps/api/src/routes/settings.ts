@@ -1,3 +1,4 @@
+import { CONTRIBUTION_TIMINGS, type ContributionTiming } from '@orla/core'
 import {
   updateSettingsRequestSchema,
   type SavingsGoal,
@@ -28,6 +29,11 @@ function toResponse(row: SettingsRow): SettingsResponse {
     theme: row.theme === 'light' || row.theme === 'dark' ? row.theme : 'system',
     hideValues: row.hideValues,
     onboardingCompleted: row.onboardingCompletedAt !== null,
+    contributionTiming: (CONTRIBUTION_TIMINGS as readonly string[]).includes(row.contributionTiming)
+      ? (row.contributionTiming as ContributionTiming)
+      : 'end',
+    returnContributionSource:
+      row.returnContributionSource === 'trades' ? 'trades' : 'contributions',
   }
 }
 
@@ -58,6 +64,10 @@ export function settingsRouter(prisma: PrismaClient): Router {
     if (input.cardCompetence) data.cardCompetence = input.cardCompetence
     if (input.theme) data.theme = input.theme
     if (input.hideValues !== undefined) data.hideValues = input.hideValues
+    if (input.contributionTiming) data.contributionTiming = input.contributionTiming
+    if (input.returnContributionSource) {
+      data.returnContributionSource = input.returnContributionSource
+    }
     if (input.onboardingCompleted !== undefined) {
       data.onboardingCompletedAt = input.onboardingCompleted ? new Date() : null
     }

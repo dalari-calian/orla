@@ -28,7 +28,7 @@ import { DividendBatchForm, DividendForm } from './forms'
 import { assetLabel, dividendKindLabels } from './labels'
 
 /** Barras empilhadas por classe, 12 meses (RC-43). */
-function StackedMonths({
+export function StackedMonths({
   months,
   classes,
 }: {

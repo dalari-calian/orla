@@ -3,6 +3,7 @@ import type { PrismaClient } from '@orla/db'
 import express, { type Express } from 'express'
 import { createClock } from './lib/clock.ts'
 import { dashboardRouter } from './routes/dashboard.ts'
+import { balancesRouter } from './routes/balances.ts'
 import { contributionsRouter } from './routes/contributions.ts'
 import { exportsRouter } from './routes/exports.ts'
 import { feedbackRouter } from './routes/feedback.ts'
@@ -113,6 +114,7 @@ export function createApp(deps: AppDeps): Express {
   authed.use(exportsRouter(prisma))
   authed.use(portfolioRouter(prisma, clock, quotes))
   authed.use(contributionsRouter(prisma, clock, quotes))
+  authed.use(balancesRouter(prisma, clock, quotes))
   authed.use(feedbackRouter(prisma, auth))
   v1.use(authed)
 

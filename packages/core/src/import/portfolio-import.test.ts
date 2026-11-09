@@ -21,6 +21,7 @@ import {
   fixedIncomeLabels,
   initialPositions,
   readPortfolioSheet,
+  type PortfolioSheetRead,
 } from './portfolio-sheet.ts'
 import { pickFields } from './template-rows.ts'
 
@@ -346,6 +347,20 @@ describe('planilha da carteira', () => {
     const kinds = drafts.map((row) => row.draft?.kind)
     expect(kinds.filter((kind) => kind === 'classTarget')).toHaveLength(3)
     expect(kinds.filter((kind) => kind === 'dividend')).toHaveLength(4)
+    // Fase 7: um aporte por linha de aporte e um balanço por mês (renda fixa somada pelo nome).
+    expect(kinds.filter((kind) => kind === 'contribution')).toHaveLength(read.trades.length)
+    const balances = drafts.flatMap((row) => (row.draft?.kind === 'balance' ? [row] : []))
+    expect(balances.length).toBe(new Set(read.balances.map((item) => item.month)).size)
+    const first = balances[0]?.draft
+    expect(first?.kind === 'balance' && first.items.some((item) => item.quantity === null)).toBe(
+      true,
+    )
+    const totals = balances.map((row) =>
+      row.draft?.kind === 'balance'
+        ? row.draft.items.reduce((sum, item) => sum + item.valueCents, 0)
+        : 0,
+    )
+    expect(totals.every((value) => value > 0)).toBe(true)
     const assets = drafts.filter((row) => row.draft?.kind === 'asset').map((row) => row.draft)
     expect(assets).toEqual(
       expect.arrayContaining([
@@ -398,5 +413,67 @@ describe('planilha da carteira', () => {
     })
     const itsa = drafts.find((row) => row.raw.posicao_inicial && row.raw.ativo === 'ITSA4')
     expect(itsa?.errors).toEqual(['Informe o preço médio da posição inicial'])
+  })
+})
+
+describe('balanços históricos da planilha', () => {
+  it('avisa quando a renda fixa cresce sem aporte registrado', () => {
+    const read: PortfolioSheetRead = {
+      trades: [
+        {
+          row: 5,
+          month: '2026-03',
+          classKind: 'fixed_income' as const,
+          label: 'CAIXINHA',
+          date: '2026-03-05' as const,
+          quantity: null,
+          unitPrice: null,
+          totalCents: 10_000,
+          note: null,
+          warnings: [],
+        },
+      ],
+      balances: [
+        {
+          row: 20,
+          month: '2026-02',
+          date: '2026-02-28' as const,
+          label: 'CAIXINHA',
+          price: null,
+          totalCents: 100_000,
+          quantity: '0',
+        },
+        {
+          row: 21,
+          month: '2026-03',
+          date: '2026-03-31' as const,
+          label: 'CAIXINHA',
+          price: null,
+          totalCents: 111_000,
+          quantity: '0',
+        },
+        {
+          row: 22,
+          month: '2026-04',
+          date: '2026-04-30' as const,
+          label: 'CAIXINHA',
+          price: null,
+          totalCents: 300_000,
+          quantity: '0',
+        },
+      ],
+      dividends: [],
+      targets: [],
+      months: ['2026-02', '2026-03', '2026-04'],
+    }
+    const drafts = buildPortfolioDrafts(read, {
+      fixedIncomeNames: { caixinha: 'Caixinha' },
+      accountName: null,
+      initialPrices: {},
+      initialValues: {},
+    })
+    const balances = drafts.filter((row) => row.draft?.kind === 'balance')
+    expect(balances.map((row) => row.warnings.length)).toEqual([0, 0, 1])
+    expect(balances[2]?.warnings[0]).toMatch(/^Caixinha subiu 1890,00 além dos aportes/)
   })
 })

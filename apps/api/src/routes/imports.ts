@@ -292,6 +292,8 @@ const EMPTY_STATS: ImportJob['stats'] = {
   assets: 0,
   trades: 0,
   dividends: 0,
+  balances: 0,
+  contributions: 0,
   created: [],
   skipped: 0,
 }
@@ -524,6 +526,8 @@ export function importsRouter(prisma: PrismaClient, clock: Clock): Router {
               entityOf.set(row.id, { type: entity.type, id: entity.id })
               if (entity.type === 'asset_trade') stats.trades += 1
               if (entity.type === 'dividend') stats.dividends += 1
+              if (entity.type === 'balance') stats.balances += 1
+              if (entity.type === 'contribution') stats.contributions += 1
             }
             continue
           }

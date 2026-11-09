@@ -10,7 +10,8 @@
     "./import": "./src/import/index.ts",
     "./portfolio": "./src/portfolio/index.ts",
     "./feedback": "./src/feedback/index.ts",
-    "./contribution": "./src/contribution/index.ts"
+    "./contribution": "./src/contribution/index.ts",
+    "./balance": "./src/balance/index.ts"
   },
   "scripts": {
     "test": "vitest run --coverage",

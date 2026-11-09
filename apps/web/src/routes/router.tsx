@@ -6,7 +6,7 @@ import { HomePage } from '@/pages/HomePage'
 import { MorePage } from '@/pages/MorePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
-import { screens, screensOf, sections, sectionScreens, type Section } from './screens'
+import { screens, sections } from './screens'
 
 /**
  * Telas já implementadas (as demais do mapa de navegação ficam como placeholder).
@@ -71,6 +71,37 @@ const implemented: RouteObject[] = [
   {
     path: '/config/importar',
     lazy: async () => ({ Component: (await import('@/features/imports/ImportPage')).ImportPage }),
+  },
+  {
+    path: '/balanco',
+    lazy: async () => ({
+      Component: (await import('@/features/balance/BalancePages')).BalanceListPage,
+    }),
+  },
+  {
+    path: '/balanco/evolucao',
+    lazy: async () => ({
+      Component: (await import('@/features/balance/BalancePages')).EvolutionPage,
+    }),
+  },
+  {
+    path: '/balanco/precos',
+    lazy: async () => ({
+      Component: (await import('@/features/balance/BalancePages')).ObservedPricesPage,
+    }),
+  },
+  {
+    path: '/balanco/:mes',
+    lazy: async () => ({
+      Component: (await import('@/features/balance/BalanceFormPage')).BalanceFormPage,
+    }),
+  },
+  {
+    path: '/carteira/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/features/portfolio/PortfolioDashboardPage'))
+        .PortfolioDashboardPage,
+    }),
   },
   {
     path: '/aporte',
@@ -139,24 +170,6 @@ const implemented: RouteObject[] = [
 ]
 const implementedPaths = new Set(implemented.map((route) => route.path))
 
-/** Página-índice de uma seção (Finanças, Carteira...), listando as telas dela. */
-function sectionRoute(key: Section['key']): RouteObject {
-  const section = sections.find((item) => item.key === key)
-  if (!section) throw new Error(`Seção desconhecida: ${key}`)
-  const info = sectionScreens[key]
-  return {
-    path: section.path,
-    element: (
-      <PlaceholderPage
-        title={section.title}
-        description={info.description}
-        phase={info.phase}
-        children={screensOf(key)}
-      />
-    ),
-  }
-}
-
 /** Telas internas ainda não implementadas: placeholder até a fase de cada uma. */
 const placeholderRoutes: RouteObject[] = screens
   .filter((screen) => !implementedPaths.has(screen.path))
@@ -201,7 +214,6 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <HomePage /> },
-          sectionRoute('balanco'),
           { path: '/mais', element: <MorePage /> },
           ...implemented,
           ...placeholderRoutes,

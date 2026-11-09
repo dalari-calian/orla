@@ -21,6 +21,8 @@ import { tradeTotalCents } from '../portfolio/position.ts'
 import { isTicker, normalizeTicker } from '../portfolio/catalog.ts'
 import type {
   AssetDraft,
+  BalanceDraft,
+  ContributionDraft,
   AssetRef,
   ClassTargetDraft,
   DividendDraft,
@@ -615,6 +617,95 @@ export function buildPortfolioDrafts(
       skipped: null,
     })
   }
+
+  // Aportes: cada linha de aporte é dinheiro novo na carteira (base da rentabilidade real).
+  for (const trade of read.trades) {
+    const draft: ContributionDraft = {
+      kind: 'contribution',
+      date: trade.date,
+      amountCents: trade.totalCents,
+      notes: `Aporte ${trade.label}`,
+    }
+    out.push({
+      rowNumber: 35_000 + trade.row,
+      sourceRows: [trade.row],
+      raw: { aporte: trade.label, data: trade.date },
+      draft,
+      errors: [],
+      warnings: [],
+      skipped: null,
+    })
+  }
+
+  // Balanços históricos: um por mês, fechado; renda fixa com o mesmo nome é somada.
+  const months = [...new Set(read.balances.map((item) => item.month))].sort(compareMonths)
+  const balanceDrafts: BalanceDraft[] = []
+  months.forEach((month, index) => {
+    const rows = read.balances.filter((item) => item.month === month)
+    const items = new Map<string, BalanceDraft['items'][number]>()
+    for (const row of rows) {
+      const stock = isTicker(row.label) && row.quantity !== '0'
+      const key = stock ? row.label : fixedName(row.label, options)
+      const classKind = stock ? (assets.get(key)?.classKind ?? 'stock') : 'fixed_income'
+      const current = items.get(key)
+      if (current && !stock) current.valueCents += row.totalCents
+      else if (!current) {
+        items.set(key, {
+          asset: refOf(key, classKind),
+          quantity: stock ? row.quantity : null,
+          price: stock ? row.price : null,
+          valueCents: row.totalCents,
+        })
+      }
+    }
+    const date = rows
+      .map((item) => item.date)
+      .sort()
+      .at(-1) as IsoDate
+    const draft: BalanceDraft = {
+      kind: 'balance',
+      competenceMonth: month,
+      referenceDate: date,
+      items: [...items.values()],
+    }
+    // Renda fixa que cresceu muito além dos aportes da planilha: dinheiro novo sem aporte
+    // registrado conta como ganho e infla a rentabilidade.
+    const warnings: string[] = []
+    const previous = index > 0 ? balanceDrafts[index - 1] : undefined
+    if (previous) {
+      for (const [key, item] of items) {
+        if (item.quantity !== null) continue
+        const before =
+          previous.items.find((entry) => entry.quantity === null && entry.asset.name === key)
+            ?.valueCents ?? 0
+        const added = read.trades
+          .filter(
+            (trade) =>
+              trade.classKind === 'fixed_income' &&
+              fixedName(trade.label, options) === key &&
+              trade.date > previous.referenceDate &&
+              trade.date <= date,
+          )
+          .reduce((sum, trade) => sum + trade.totalCents, 0)
+        const extra = item.valueCents - before - added
+        if (extra > Math.max(5_000, Math.round((before + added) * 0.1))) {
+          warnings.push(
+            `${key} subiu ${(extra / 100).toFixed(2).replace('.', ',')} além dos aportes da planilha: se foi dinheiro novo, lance o aporte (senão conta como rendimento)`,
+          )
+        }
+      }
+    }
+    balanceDrafts.push(draft)
+    out.push({
+      rowNumber: 40_000 + index,
+      sourceRows: rows.map((item) => item.row),
+      raw: { balanco: month, data: date },
+      draft,
+      errors: [],
+      warnings,
+      skipped: null,
+    })
+  })
 
   read.dividends.forEach((item) => {
     const known = [...assets.keys()].find((key) => key === item.label || key.startsWith(item.label))

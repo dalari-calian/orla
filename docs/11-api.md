@@ -171,6 +171,15 @@ Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras
 | GET    | `/returns?year=`                     | rentabilidade real (doc 07 §3) |
 | GET    | `/price-observations`                | RB-30                          |
 
+**Balanço, implementado na Fase 7:**
+
+- `GET /balances` → `{ data: [linha por balanço: total, anterior, aportes, proventos, ganho real, taxa, acumulado desde o início e no ano, aportado acumulado, contributionsChanged], years: [resumo do ano: ganho, TWR, capital base, ganho sobre o capital, média mensal, projeção], settings, currentMonth, currentMonthDone }`. O cálculo é do core (`balance`).
+- `GET /balances/form?month=AAAA-MM[&date=]` → linhas pré-preenchidas (RB-02). Bolsa: quantidade na data × preço atual (o preço do balanço salvo, se houver). Renda fixa e saldo em conta: valor a preencher, com o do balanço anterior como referência. Vêm também o balanço anterior, os aportes e proventos do período, ao vivo, e os fluxos (para o Dietz). Sem `date`: a do balanço salvo, ou hoje (mês atual), ou o último dia do mês.
+- `POST /balances { competenceMonth, referenceDate, notes?, items: [{ kind: asset|cash, assetId | accountId, quantity?, price?, valueCents, dy?, pvp? }] }`: um por mês (409 se já existe). Bolsa com quantidade e preço: valor = qtd × preço. `PUT /:id` (rascunho; fechado → 409) · `DELETE /:id` · `GET /:id`.
+- `POST /balances/:id/close`: congela os aportes e proventos do período. Se for o balanço mais recente, o saldo de cada renda fixa (e o preço dos ativos de preço manual) vira o valor atual do ativo. `POST /:id/reopen`: volta a rascunho e descongela; os meses seguintes são recalculados.
+- `GET /observed-prices` (RB-30): por ativo, máximo, mínimo, último preço, DY e P/VP vistos nos balanços, histórico, preço de hoje, PM e distância da mínima e da máxima.
+- `/me/settings` ganhou `contributionTiming` (`end` · `start` · `dietz`) e `returnContributionSource` (`contributions` · `trades`).
+
 ### Importação / exportação (Fase 4)
 
 | método | rota                                          |                                                                       |

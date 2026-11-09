@@ -212,6 +212,18 @@ const COLUMNS: Record<string, Record<string, ColumnType>> = {
     classSplit: 'json',
     executedAt: 'dateOrNull',
   },
+  balances: {
+    id: 'string',
+    referenceDate: 'date',
+    competenceMonth: 'date',
+    totalCents: 'cents',
+    contributionsCents: 'centsOrNull',
+    dividendsCents: 'centsOrNull',
+    notes: 'stringOrNull',
+    status: 'string',
+    closedAt: 'dateOrNull',
+    source: 'string',
+  },
   contributions: {
     id: 'string',
     date: 'date',
@@ -359,6 +371,7 @@ const TABLE_ORDER = [
   'assetTrades',
   'dividends',
   'contributions',
+  'balances',
 ] as const
 type Table = (typeof TABLE_ORDER)[number]
 
@@ -461,6 +474,7 @@ function delegate(tx: Prisma.TransactionClient, table: Table): Delegate {
     dividends: tx.dividend,
     contributionPlans: tx.contributionPlan,
     contributions: tx.contribution,
+    balances: tx.balance,
   }
   return map[table] as Delegate
 }
@@ -543,6 +557,65 @@ async function restorePlanItems(
   }
 }
 
+/**
+ * Linhas dos balanços (não têm user_id: pertencem ao balanço). Só entram as de balanços que
+ * ficaram com este usuário; ativo, classe e conta que não são dele viram null.
+ */
+async function restoreBalanceItems(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  mode: 'merge' | 'replace',
+  owned: Map<Table, Set<string>>,
+  data: { balanceItems?: Record<string, unknown>[] },
+  counts: RestoreResponse,
+): Promise<void> {
+  const balances = owned.get('balances') ?? new Set<string>()
+  const assets = owned.get('assets') ?? new Set<string>()
+  const accounts = owned.get('accounts') ?? new Set<string>()
+  const classes = owned.get('assetClasses') ?? new Set<string>()
+  const ref = (value: unknown, set: Set<string>) =>
+    typeof value === 'string' && set.has(value) ? value : null
+  const decimal = (value: unknown, key: string) => {
+    if (value === null || value === undefined) return null
+    if (!DECIMAL.test(String(value))) invalid(`balanceItems.${key}`)
+    return String(value)
+  }
+  for (const record of data.balanceItems ?? []) {
+    const id = String(record.id)
+    const balanceId = String(record.balanceId)
+    if (!UUID.test(id) || !balances.has(balanceId)) continue
+    const kind = String(record.kind)
+    if (kind !== 'asset' && kind !== 'cash') invalid('balanceItems.kind')
+    if (!Number.isSafeInteger(record.valueCents) || (record.valueCents as number) < 0) {
+      invalid('balanceItems.valueCents')
+    }
+    const item = {
+      balanceId,
+      kind,
+      assetId: ref(record.assetId, assets),
+      assetClassId: ref(record.assetClassId, classes),
+      accountId: ref(record.accountId, accounts),
+      label: String(record.label ?? '').slice(0, 120) || 'Item',
+      ticker: typeof record.ticker === 'string' ? record.ticker.slice(0, 20) : null,
+      quantity: decimal(record.quantity, 'quantity'),
+      price: decimal(record.price, 'price'),
+      valueCents: BigInt(record.valueCents as number),
+      dy: decimal(record.dy, 'dy'),
+      pvp: decimal(record.pvp, 'pvp'),
+      sortOrder: Number.isInteger(record.sortOrder) ? (record.sortOrder as number) : 0,
+    }
+    const exists = await tx.balanceItem.findUnique({
+      where: { id },
+      select: { balance: { select: { userId: true } } },
+    })
+    if (exists && exists.balance.userId !== userId) continue
+    if (exists && mode === 'merge') continue
+    await tx.balanceItem.upsert({ where: { id }, create: { id, ...item }, update: item })
+    if (exists) counts.updated += 1
+    else counts.created += 1
+  }
+}
+
 /** /exports, /backup, /restore (RE-01, RE-02). */
 export function exportsRouter(prisma: PrismaClient): Router {
   const router = Router()
@@ -594,6 +667,7 @@ export function exportsRouter(prisma: PrismaClient): Router {
       dividends,
       contributionPlans,
       contributions,
+      balances,
     ] = await Promise.all([
       prisma.userSettings.findUnique({ where: { userId } }),
       prisma.account.findMany({ where: live }),
@@ -617,6 +691,7 @@ export function exportsRouter(prisma: PrismaClient): Router {
       prisma.dividend.findMany({ where: live }),
       prisma.contributionPlan.findMany({ where: live, include: { items: true } }),
       prisma.contribution.findMany({ where: live }),
+      prisma.balance.findMany({ where: live, include: { items: true } }),
     ])
     const body: Backup = {
       app: 'orla',
@@ -640,6 +715,8 @@ export function exportsRouter(prisma: PrismaClient): Router {
         contributionPlans: contributionPlans.map(({ items: _items, ...plan }) => plain(plan)),
         contributionPlanItems: contributionPlans.flatMap((plan) => plan.items.map(plain)),
         contributions: contributions.map(plain),
+        balances: balances.map(({ items: _items, ...balance }) => plain(balance)),
+        balanceItems: balances.flatMap((balance) => balance.items.map(plain)),
       },
     }
     res.setHeader(
@@ -748,6 +825,18 @@ export function exportsRouter(prisma: PrismaClient): Router {
             if (table === 'transactions' && record.recurringTemplateId && monthTaken(record)) {
               record.recurringTemplateId = null
             }
+            // Um balanço por mês: se o mês já tem outro balanço vivo, o do arquivo não entra.
+            if (table === 'balances') {
+              const clash = await tx.balance.count({
+                where: {
+                  userId,
+                  deletedAt: null,
+                  competenceMonth: record.competenceMonth as Date,
+                  id: { not: id },
+                },
+              })
+              if (clash > 0) continue
+            }
             if (owner) {
               if (mode === 'merge') {
                 valid.add(id)
@@ -789,6 +878,7 @@ export function exportsRouter(prisma: PrismaClient): Router {
         }
 
         await restorePlanItems(tx, userId, mode, owned, backup.data, counts)
+        await restoreBalanceItems(tx, userId, mode, owned, backup.data, counts)
 
         // Metas de alocação: só das classes que ficaram com este usuário.
         const myClasses = owned.get('assetClasses') ?? new Set<string>()

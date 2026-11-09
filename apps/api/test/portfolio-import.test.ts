@@ -7,7 +7,12 @@ import {
   readPortfolioSheet,
   tradeRowToDraft,
 } from '@orla/core'
-import { importJobSchema, portfolioResponseSchema, type ImportRowsRequest } from '@orla/contracts'
+import {
+  balancesResponseSchema,
+  importJobSchema,
+  portfolioResponseSchema,
+  type ImportRowsRequest,
+} from '@orla/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { makeApp, resetDatabase, signUp } from './support/app.ts'
 
@@ -97,6 +102,15 @@ describe('planilha da carteira', () => {
     expect(portfolio.targetsTotalPct).toBe('100')
     expect(byLabel.get('MXRF11')?.dividends12mCents).toBe(880)
 
+    // Fase 7: balanços históricos (fechados) e aportes de cada linha de aporte.
+    expect(job.stats.balances).toBeGreaterThan(0)
+    expect(job.stats.contributions).toBe(job.stats.trades - 3)
+    const series = balancesResponseSchema.parse((await agent.get('/api/v1/balances')).body)
+    expect(series.data).toHaveLength(job.stats.balances)
+    expect(series.data.every((row) => row.status === 'closed')).toBe(true)
+    expect(series.data[0]?.gainCents).toBeNull()
+    if (series.data.length > 1) expect(series.data[1]?.rate).not.toBeNull()
+
     // Reimportar: operações e proventos viram duplicados.
     const again = await agent
       .post('/api/v1/imports')
@@ -113,6 +127,8 @@ describe('planilha da carteira', () => {
     const after = portfolioResponseSchema.parse((await agent.get('/api/v1/portfolio')).body)
     expect(after.positions).toEqual([])
     expect(after.classes.every((item) => item.target === null)).toBe(true)
+    expect((await agent.get('/api/v1/balances')).body.data).toEqual([])
+    expect((await agent.get('/api/v1/contributions')).body.data).toEqual([])
   })
 
   it('venda maior que a posição desfaz o commit inteiro (RI-05)', async () => {

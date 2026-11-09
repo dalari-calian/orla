@@ -24,14 +24,16 @@ import { loadClasses, tradeInput } from './portfolio.ts'
 
 type PortfolioDraft = Extract<
   ImportDraftInput,
-  { kind: 'classTarget' | 'asset' | 'assetTrade' | 'dividend' }
+  { kind: 'classTarget' | 'asset' | 'assetTrade' | 'dividend' | 'balance' | 'contribution' }
 >
 
 export const isPortfolioDraft = (draft: ImportDraftInput): draft is PortfolioDraft =>
   draft.kind === 'classTarget' ||
   draft.kind === 'asset' ||
   draft.kind === 'assetTrade' ||
-  draft.kind === 'dividend'
+  draft.kind === 'dividend' ||
+  draft.kind === 'balance' ||
+  draft.kind === 'contribution'
 
 interface ClassLite {
   id: string
@@ -54,25 +56,39 @@ export interface PortfolioContext {
   trades: Set<string>
   /** asset|data|valor */
   dividends: Set<string>
+  /** Meses (AAAA-MM) que já têm balanço. */
+  balanceMonths: Set<string>
+  /** data|valor dos aportes */
+  contributions: Set<string>
 }
 
 export async function portfolioContext(db: Db, userId: string): Promise<PortfolioContext> {
-  const [classes, assets, accounts, trades, dividends] = await Promise.all([
-    loadClasses(db, userId),
-    db.asset.findMany({
-      where: { userId, deletedAt: null },
-      select: { id: true, ticker: true, name: true, accountId: true, assetClassId: true },
-    }),
-    db.account.findMany({ where: { userId, deletedAt: null }, select: { id: true, name: true } }),
-    db.assetTrade.findMany({
-      where: { userId, deletedAt: null },
-      select: { assetId: true, tradeDate: true, kind: true, quantity: true, unitPrice: true },
-    }),
-    db.dividend.findMany({
-      where: { userId, deletedAt: null },
-      select: { assetId: true, payDate: true, amountCents: true },
-    }),
-  ])
+  const [classes, assets, accounts, trades, dividends, balances, contributions] = await Promise.all(
+    [
+      loadClasses(db, userId),
+      db.asset.findMany({
+        where: { userId, deletedAt: null },
+        select: { id: true, ticker: true, name: true, accountId: true, assetClassId: true },
+      }),
+      db.account.findMany({ where: { userId, deletedAt: null }, select: { id: true, name: true } }),
+      db.assetTrade.findMany({
+        where: { userId, deletedAt: null },
+        select: { assetId: true, tradeDate: true, kind: true, quantity: true, unitPrice: true },
+      }),
+      db.dividend.findMany({
+        where: { userId, deletedAt: null },
+        select: { assetId: true, payDate: true, amountCents: true },
+      }),
+      db.balance.findMany({
+        where: { userId, deletedAt: null },
+        select: { competenceMonth: true },
+      }),
+      db.contribution.findMany({
+        where: { userId, deletedAt: null },
+        select: { date: true, amountCents: true },
+      }),
+    ],
+  )
   return {
     classes: classes.map((item) => ({ id: item.id, name: item.name, kind: item.kind })),
     assets,
@@ -92,6 +108,12 @@ export async function portfolioContext(db: Db, userId: string): Promise<Portfoli
       dividends.map(
         (item) =>
           `${item.assetId}|${item.payDate.toISOString().slice(0, 10)}|${centsToNumber(item.amountCents)}`,
+      ),
+    ),
+    balanceMonths: new Set(balances.map((item) => item.competenceMonth.toISOString().slice(0, 7))),
+    contributions: new Set(
+      contributions.map(
+        (item) => `${item.date.toISOString().slice(0, 10)}|${centsToNumber(item.amountCents)}`,
       ),
     ),
   }
@@ -179,6 +201,22 @@ export function checkPortfolioDraft(
       messages.push(
         `Provável duplicado: ${assetLabel(draft.asset)} já tem essa operação em ${draft.date.split('-').reverse().join('/')}`,
       )
+    }
+  } else if (draft.kind === 'balance') {
+    for (const item of draft.items) refCheck(item.asset)
+    const total = draft.items.reduce((sum, item) => sum + item.valueCents, 0)
+    messages.push(
+      `Balanço de ${draft.referenceDate.split('-').reverse().join('/')}: ${draft.items.length} ativos`,
+    )
+    if (ctx.balanceMonths.has(draft.competenceMonth)) {
+      duplicate = true
+      messages.push('Já existe um balanço deste mês: fica o que já está no Orla')
+    }
+    if (total <= 0) errors.push('Balanço sem valor')
+  } else if (draft.kind === 'contribution') {
+    if (ctx.contributions.has(`${draft.date}|${draft.amountCents}`)) {
+      duplicate = true
+      messages.push('Provável duplicado: aporte igual já registrado')
     }
   } else {
     const asset = refCheck(draft.asset)
@@ -276,6 +314,59 @@ export function portfolioWriter(
       if (Object.keys(data).length > 0) await tx.asset.update({ where: { id: asset.id }, data })
       return null // o ativo criado já entra em `created`; atualizar preço não precisa desfazer
     }
+    if (draft.kind === 'contribution') {
+      const id = randomUUID()
+      await tx.contribution.create({
+        data: {
+          id,
+          userId,
+          date: isoDateToDate(draft.date),
+          competenceMonth: isoDateToDate(`${draft.date.slice(0, 7)}-01`),
+          amountCents: BigInt(draft.amountCents),
+          notes: draft.notes,
+        },
+      })
+      ctx.contributions.add(`${draft.date}|${draft.amountCents}`)
+      return { type: 'contribution', id }
+    }
+    if (draft.kind === 'balance') {
+      if (ctx.balanceMonths.has(draft.competenceMonth)) return null
+      const items: Prisma.BalanceItemCreateManyBalanceInput[] = []
+      for (const [index, item] of draft.items.entries()) {
+        const asset = await assetFor(item.asset)
+        if (!asset) continue
+        items.push({
+          kind: 'asset',
+          assetId: asset.id,
+          assetClassId: asset.assetClassId,
+          accountId: asset.accountId,
+          label: asset.ticker ?? asset.name,
+          ticker: asset.ticker,
+          quantity: item.quantity,
+          price: item.price,
+          valueCents: BigInt(item.valueCents),
+          sortOrder: index,
+        })
+      }
+      if (items.length === 0) return null
+      const id = randomUUID()
+      await tx.balance.create({
+        data: {
+          id,
+          userId,
+          competenceMonth: isoDateToDate(`${draft.competenceMonth}-01`),
+          referenceDate: isoDateToDate(draft.referenceDate),
+          totalCents: items.reduce((sum, item) => sum + BigInt(item.valueCents), 0n),
+          // Fechado, com aporte e proventos calculados ao vivo (null = não congelado).
+          status: 'closed',
+          closedAt: new Date(),
+          source: 'import',
+          items: { createMany: { data: items } },
+        },
+      })
+      ctx.balanceMonths.add(draft.competenceMonth)
+      return { type: 'balance', id }
+    }
     const asset = await assetFor(draft.asset)
     if (!asset) return null
     touched.add(asset.id)
@@ -360,6 +451,14 @@ export async function undoPortfolio(
   })
   await tx.dividend.updateMany({
     where: { userId, id: { in: ids('dividend') } },
+    data: { deletedAt: now },
+  })
+  await tx.balance.updateMany({
+    where: { userId, id: { in: ids('balance') } },
+    data: { deletedAt: now },
+  })
+  await tx.contribution.updateMany({
+    where: { userId, id: { in: ids('contribution') } },
     data: { deletedAt: now },
   })
   for (const row of rows.filter(

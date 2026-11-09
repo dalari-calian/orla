@@ -65,6 +65,7 @@ O SheetJS (0.20.3, versão oficial do site deles — a do npm tem falhas conheci
 - **Balanço mensal** (depois de "BALANÇO MENSAL"): mês, ativo, data, preço, total, quantidade. **Proventos** ao lado (I–L). "CONTROLE ..." em diante é ignorado.
 - **Posição anterior aos aportes** (decisão do dono): quantidade do 1º balanço − compras até ele vira uma compra em 1º/jan; o PM vem com o preço daquele balanço e **é editável** no passo 3. Renda fixa: saldo do 1º balanço − aportes até ele.
 - **Conciliação**: se um balanço mostra mais/menos cotas do que posição inicial + aportes explicam, entra uma compra/venda de ajuste na data e preço do balanço, com aviso.
+- **Balanços (Fase 7)**: cada mês do "BALANÇO MENSAL" vira um balanço fechado (bolsa com quantidade × preço; renda fixa somada pelo nome do passo 3). Cada linha de aporte vira também um **aporte** (contribution), base da rentabilidade real. Mês que já tem balanço no Orla fica como está (duplicado). Renda fixa que cresce além dos aportes gera aviso no balanço.
 - **Último balanço**: preço de cada ativo (`manual_price`, vale até uma cotação mais nova) e saldo de cada renda fixa (`manual_value_cents`).
 - **Renda fixa**: os nomes variam entre aporte e balanço ("TESOURO 2031"/"SELIC 2031", "CAIXI. TB. NUBANK"…); no passo 3 o usuário dá o mesmo nome aos que são um só ativo.
 - Templates genéricos de **Ativos**, **Operações** e **Proventos** com exemplo + instruções, como os de finanças.
@@ -72,7 +73,7 @@ O SheetJS (0.20.3, versão oficial do site deles — a do npm tem falhas conheci
 ## 2. Exportação e backup
 
 - **RE-01** Exportar por entidade em CSV (pt-BR, `;`) ou XLSX, com filtro de período.
-- **RE-02** (Fase 5: inclui classes, metas, ativos, operações e proventos) **Backup completo** em JSON (todas as tabelas do usuário, versão do schema) e **restaurar** a partir dele (substituir ou mesclar).
+- **RE-02** (Fase 5: inclui classes, metas, ativos, operações e proventos; Fase 6: simulações e aportes; Fase 7: balanços com as linhas) **Backup completo** em JSON (todas as tabelas do usuário, versão do schema) e **restaurar** a partir dele (substituir ou mesclar).
 - **RE-03** Backup automático do banco inteiro semanal via GitHub Actions (`pg_dump` criptografado com `age`/GPG) — porque o free do Neon tem janela de restauração curta.
 
 ## 3. Entrada manual (UX)

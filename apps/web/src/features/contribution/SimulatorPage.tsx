@@ -1081,7 +1081,14 @@ function Editor({
             sim={sim}
             onDone={(allBought) => {
               setExecuting(false)
-              if (allBought) void navigate('/aporte')
+              // RA-33: o balanço do mês vem logo depois do aporte (doc 07).
+              if (allBought) {
+                void navigate(
+                  window.confirm('Aporte efetivado. Fazer o balanço mensal agora?')
+                    ? `/balanco/${plan.competenceMonth}`
+                    : '/aporte',
+                )
+              }
             }}
           />
         )}

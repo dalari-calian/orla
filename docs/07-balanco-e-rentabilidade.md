@@ -76,6 +76,18 @@ Substitui a planilha de "melhor preço / preço máximo / DY / P/VP":
 - **Evolução:** gráfico de patrimônio × aportado acumulado; barras de rentabilidade mensal; tabela anual (mês, V₀, aportes, V₁, ganho, %, acumulado).
 - **Indicadores observados** (RB-30).
 
+## Decisões (Fase 7)
+
+- **Core** em `packages/core/src/balance`: `periodReturn`, `flowsInPeriod`, `chainRates` (TWR), `balanceSeries`, `yearSummary`, `observedPrices`.
+- **Aportado acumulado** (linha do gráfico): o 1º balanço inteiro conta como capital próprio, mais os aportes depois dele.
+- **Capital base do ano**: o último balanço do ano anterior; sem ele, o total anterior ao 1º balanço do ano, ou o próprio 1º balanço. A **projeção** usa os meses que faltam depois do último balanço do ano e a meta padrão de investimento como aporte previsto.
+- **Fechar** congela aportes e proventos (RB-12: o `GET /balances` avisa quando a origem mudou depois). O balanço mais recente, ao fechar, atualiza o saldo das rendas fixas e o preço dos ativos de preço manual. Balanços importados entram fechados, mas com aporte e proventos calculados ao vivo.
+- **Dietz** com aporte congelado diferente do calculado: o aporte é tratado como feito no dia do balanço.
+- **Saldo em conta**: uma linha por corretora dos ativos (ou que já tinha saldo), conta como patrimônio.
+- **Importação de balanços históricos**: a "Planilha da carteira" agora cria um balanço fechado por mês (renda fixa com o mesmo nome é somada) e um aporte por linha de aporte. Quando uma renda fixa cresce muito além dos aportes da planilha (mais que R$ 50 e 10%), o balanço vem com aviso: dinheiro novo sem aporte registrado conta como rendimento.
+- **Aceite × planilha do dono**: o "LUCRO MÊS" da planilha é a variação do "PAT. ATU. RIC" (Rico − todos os aportes do mês, inclusive os do Nubank), sem descontar o aporte de agosto. Não é a rentabilidade real deste doc, então os números não batem por construção. O Orla usa a fórmula daqui, com o patrimônio inteiro.
+- **RB-21** (rentabilidade por classe) e **RB-22** (CDI/IPCA/IBOV) ficam para depois.
+
 ## Casos de teste obrigatórios
 
 - V₀=10.000, C=1.200, V₁=11.350 → ganho 150, r = 1,5% (end) e 1,339% (start).

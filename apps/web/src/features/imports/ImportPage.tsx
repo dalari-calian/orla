@@ -264,6 +264,20 @@ function describeRow(row: ParsedImportRow): { title: string; subtitle: string; a
       amount: `+${formatBRL(draft.amountCents)}`,
     }
   }
+  if (draft.kind === 'balance') {
+    return {
+      title: `Balanço de ${monthLabel(draft.competenceMonth)}`,
+      subtitle: `${shortDate(draft.referenceDate)} · ${draft.items.length} ativos · entra fechado`,
+      amount: formatBRL(draft.items.reduce((sum, item) => sum + item.valueCents, 0)),
+    }
+  }
+  if (draft.kind === 'contribution') {
+    return {
+      title: draft.notes ?? 'Aporte',
+      subtitle: `Aporte (dinheiro novo na carteira) · ${shortDate(draft.date)}`,
+      amount: `+${formatBRL(draft.amountCents)}`,
+    }
+  }
   return {
     title: `Meta investida de ${monthLabel(draft.month)}`,
     subtitle: 'Vai para a aba Investimento do mês',

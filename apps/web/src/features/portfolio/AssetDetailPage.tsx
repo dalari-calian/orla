@@ -24,6 +24,7 @@ import {
   useDividendMutations,
   useTradeMutations,
 } from './api'
+import { ObservedPricesCard } from '@/features/balance/ObservedPricesCard'
 import { AssetForm, DividendForm, TradeForm, type TradePreset } from './forms'
 import {
   assetLabel,
@@ -344,19 +345,7 @@ export function AssetDetailPage() {
     </Card>
   )
 
-  const prices = (
-    <Card className="space-y-2">
-      <CardHeader title="Preços observados" />
-      <p className="text-subhead text-text-2">
-        Preço máximo e mínimo já vistos, último DY e P/VP saem dos balanços mensais, que chegam na
-        Fase 7. Por enquanto:{' '}
-        {quote?.price
-          ? `última cotação ${formatPrice(quote.price)} (${relativeTime(quote.quotedAt ?? quote.fetchedAt)})`
-          : 'sem cotação em cache'}
-        .
-      </p>
-    </Card>
-  )
+  const prices = <ObservedPricesCard assetId={asset.id} quote={quote} />
 
   return (
     <>

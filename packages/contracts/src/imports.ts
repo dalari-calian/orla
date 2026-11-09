@@ -135,6 +135,30 @@ export const importDividendDraftSchema = z.object({
   amountCents: positiveCentsSchema,
 })
 
+export const importBalanceDraftSchema = z.object({
+  kind: z.literal('balance'),
+  competenceMonth: competenceMonthSchema,
+  referenceDate: isoDateSchema,
+  items: z
+    .array(
+      z.object({
+        asset: importAssetRefSchema,
+        quantity: decimalStringSchema.nullable(),
+        price: decimalStringSchema.nullable(),
+        valueCents: nonNegativeCentsSchema,
+      }),
+    )
+    .min(1)
+    .max(300),
+})
+
+export const importContributionDraftSchema = z.object({
+  kind: z.literal('contribution'),
+  date: isoDateSchema,
+  amountCents: positiveCentsSchema,
+  notes: notes,
+})
+
 export const importDraftSchema = z.discriminatedUnion('kind', [
   importTransactionDraftSchema,
   importInstallmentDraftSchema,
@@ -143,6 +167,8 @@ export const importDraftSchema = z.discriminatedUnion('kind', [
   importAssetDraftSchema,
   importAssetTradeDraftSchema,
   importDividendDraftSchema,
+  importBalanceDraftSchema,
+  importContributionDraftSchema,
 ])
 export type ImportDraftInput = z.infer<typeof importDraftSchema>
 
@@ -208,6 +234,8 @@ export const importJobSchema = z.object({
     assets: z.number().int().default(0),
     trades: z.number().int().default(0),
     dividends: z.number().int().default(0),
+    balances: z.number().int().default(0),
+    contributions: z.number().int().default(0),
     created: z.array(z.string()),
     skipped: z.number().int(),
   }),
@@ -258,6 +286,8 @@ export const backupSchema = z.object({
     targetAllocations: z.array(z.record(z.string(), z.unknown())).default([]),
     contributionPlans: z.array(z.record(z.string(), z.unknown())).default([]),
     contributionPlanItems: z.array(z.record(z.string(), z.unknown())).default([]),
+    balances: z.array(z.record(z.string(), z.unknown())).default([]),
+    balanceItems: z.array(z.record(z.string(), z.unknown())).default([]),
     contributions: z.array(z.record(z.string(), z.unknown())).default([]),
     assets: z.array(z.record(z.string(), z.unknown())).default([]),
     assetTrades: z.array(z.record(z.string(), z.unknown())).default([]),

@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ChartPie,
   HandCoins,
+  LayoutDashboard,
   Plus,
   RefreshCw,
   TriangleAlert,
@@ -61,7 +62,7 @@ function Signed({
 }
 
 /** Barras atual × meta por classe (docs/10 › AllocationBars). */
-function AllocationBars({ classes }: { classes: ClassAllocation[] }) {
+export function AllocationBars({ classes }: { classes: ClassAllocation[] }) {
   const visible = classes.filter((item) => item.valueCents > 0 || item.target !== null)
   return (
     <ul className="space-y-3.5">
@@ -427,6 +428,13 @@ export function PortfolioPage() {
             </Card>
 
             <nav aria-label="Atalhos da carteira" className="grid grid-cols-2 gap-3">
+              <Link
+                to="/carteira/dashboard"
+                className="press col-span-2 flex min-h-14 items-center gap-2 rounded-card bg-surface px-4 text-subhead font-medium shadow-card"
+              >
+                <LayoutDashboard className="size-5 text-accent" aria-hidden />
+                Dashboard da carteira
+              </Link>
               <Link
                 to="/carteira/proventos"
                 className="press flex min-h-14 items-center gap-2 rounded-card bg-surface px-4 text-subhead font-medium shadow-card"

@@ -35,6 +35,8 @@ function summary(job: ImportJob): string {
     job.stats.monthGoals > 0 && `${job.stats.monthGoals} metas`,
     job.stats.trades > 0 && `${job.stats.trades} operações`,
     job.stats.dividends > 0 && `${job.stats.dividends} proventos`,
+    job.stats.balances > 0 && `${job.stats.balances} balanços`,
+    job.stats.contributions > 0 && `${job.stats.contributions} aportes`,
     job.stats.assets > 0 && `${job.stats.assets} ativos`,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : 'Nada gravado'

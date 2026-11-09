@@ -1,3 +1,4 @@
+import { CONTRIBUTION_SOURCES, CONTRIBUTION_TIMINGS } from '@orla/core'
 import { z } from 'zod'
 import { nonNegativeCentsSchema } from './common.ts'
 
@@ -20,6 +21,9 @@ export type SavingsGoal = z.infer<typeof savingsGoalSchema>
 
 export const themeSchema = z.enum(['light', 'dark', 'system'])
 export const cardCompetenceSchema = z.enum(['due_month', 'closing_month'])
+/** Rentabilidade real (docs/07 §3): quando o aporte entra e de onde vem. */
+export const contributionTimingSchema = z.enum(CONTRIBUTION_TIMINGS)
+export const contributionSourceSchema = z.enum(CONTRIBUTION_SOURCES)
 
 /** GET /me/settings */
 export const settingsResponseSchema = z.object({
@@ -28,6 +32,8 @@ export const settingsResponseSchema = z.object({
   theme: themeSchema,
   hideValues: z.boolean(),
   onboardingCompleted: z.boolean(),
+  contributionTiming: contributionTimingSchema,
+  returnContributionSource: contributionSourceSchema,
 })
 export type SettingsResponse = z.infer<typeof settingsResponseSchema>
 
@@ -39,6 +45,8 @@ export const updateSettingsRequestSchema = z
     theme: themeSchema,
     hideValues: z.boolean(),
     onboardingCompleted: z.boolean(),
+    contributionTiming: contributionTimingSchema,
+    returnContributionSource: contributionSourceSchema,
   })
   .partial()
 export type UpdateSettingsRequest = z.infer<typeof updateSettingsRequestSchema>

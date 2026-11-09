@@ -225,6 +225,8 @@ Simulações salvas.
 - plan: `id, user_id, competence_month, name, total_cents, status (draft · executed · discarded), class_split jsonb ({asset_class_id: pct}), executed_at`
 - item: `id, plan_id, asset_id, mode (by_value · by_quantity), quantity, unit_price, value_cents, sort_order`
 
+> **Fase 7:** `balances` tem `contributions_cents`/`dividends_cents` **nulos** em rascunho (congelados ao fechar), `closed_at`, `source` (`manual` · `import`) e `deleted_at`. Um por mês: índice parcial único `(user_id, competence_month) WHERE deleted_at IS NULL`. `balance_items`: `kind` (`asset` · `cash`), `asset_id`/`asset_class_id`/`account_id` nulos, `label` e `ticker` congelados, `quantity`/`price` nulos na renda fixa e no saldo em conta, `dy`, `pvp`, `sort_order`.
+
 ### `balances` / `balance_items`
 
 Snapshot mensal congelado (o "balanço mensal" da planilha).
