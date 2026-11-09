@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 
 /** Fase do roadmap em andamento (docs/13): telas de fases futuras mostram "Fase N". */
-export const CURRENT_PHASE = 5
+export const CURRENT_PHASE = 6
 
 /** Seções principais (sidebar no desktop; Início/Finanças/Carteira na tab bar). */
 export interface Section {

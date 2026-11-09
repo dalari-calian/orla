@@ -154,6 +154,12 @@ Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras
 | POST   | `/contribution-plans/:id/execute`       | cria trades + contribution |
 | CRUD   | `/contributions`                        |                            |
 
+**Implementado na Fase 6:**
+
+- `GET /contribution-plans[?month=AAAA-MM]` (itens embutidos) · `GET /:id` · `POST` · `PUT /:id` · `DELETE /:id`. Corpo de `POST`/`PUT`: `{ competenceMonth, name, totalCents, classSplit: { assetClassId: pct }, isPrimary?, items: [{ assetId | newAsset: { ticker, name, assetClassId }, mode, quantity, unitPrice, valueCents }] }`. O `PUT` é o autosave do rascunho: substitui só os itens **ainda não comprados**, que voltam com **ids novos**. A primeira simulação do mês vira a principal; `isPrimary: true` tira a marca das outras. Simulação efetivada não aceita `PUT` nem `DELETE` (409), e simulação com compras não pode ser excluída.
+- `POST /contribution-plans/:id/execute { date, items: [{ itemId, quantity, unitPrice, feesCents?, totalCents? }], registerInvested = true, accountId? }`: para cada item, cria o ativo novo, se for o caso (ou reaproveita o mesmo ticker), e uma compra (`buy`, ou `fixed_income_deposit` na renda fixa) com `contribution_plan_id` e `source=contribution`. Cria também **um** `contribution` com o total, no mês do plano. Com `registerInvested`, soma o total ao **investido da meta** do mês (`month_settings.goal_invested_cents`). A efetivação parcial é permitida; quando todos os itens estão comprados, o plano vira `executed`.
+- `/contributions`: `GET ?from=&to=` (meses) · `POST { date, amountCents (≠ 0; negativo = saiu da carteira), accountId?, notes? }` · `PATCH /:id` · `DELETE /:id`. O mês de competência é o da data.
+
 ### Balanço
 
 | método | rota                                 |                                |

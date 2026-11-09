@@ -55,6 +55,16 @@ desvioMeta[c] p.p.     = pesoClassePos[c] − meta[c]
 - **RA-32** Efetivação parcial permitida (marcar quais itens foram comprados).
 - **RA-33** Após efetivar, sugere: "Fazer o balanço mensal agora?" (o usuário faz o balanço depois dos aportes — doc 07).
 
+## Decisões (Fase 6)
+
+- **Cálculo no navegador**: `simulate`, `suggestSplit`, `suggestClassItems` e `suggestPlan` em `packages/core/src/contribution`. A tela recalcula a cada tecla e a API só salva e efetiva.
+- **Divisão em %, com até 8 casas**: dá para dividir em R$ (400 de 1.200 → `33.33333333`). Com a soma em 100%, os valores por classe somam **exatamente** o total (maior resto).
+- **Rebalancear** (RA-20) preenche a divisão **e** o carrinho com a sugestão; se já houver itens, pede confirmação. Dentro da classe, os ativos sem peso alvo recebem por igual, ou seja, os de menor peso levam mais. Ativos de bolsa sem preço ficam fora da sugestão.
+- **Cores por classe** (RA-14): verde se sobrou ou fechou no valor; âmbar se passou até 5% do valor da classe; vermelho se passou mais que isso. Os alertas de ativo saem do teto na carteira (`max_weight_pct`) e do peso alvo na classe + 5 p.p.
+- **Valor sugerido** (RA-01): o que falta investir da meta do mês (`goalRemainingCents`); se ela já foi cumprida, a meta inteira.
+- **Efetivar** soma o total ao **investido da meta do mês** (a meta funciona como uma conta). Isso pode ser desmarcado na efetivação.
+- **RA-33** (sugerir o balanço depois de efetivar) fica para a Fase 7, junto com o Balanço.
+
 ## Casos de teste obrigatórios
 
 - Exemplo da planilha: total 1.200, divisão 500/400/300, item VALE3 R$ 100 → restante total 1.100, restante Ações 300.

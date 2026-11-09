@@ -55,11 +55,13 @@ function useInvalidate() {
 
 // ─── Mês ─────────────────────────────────────────────────────────────────────
 
-export function useMonth(month: string) {
+/** `enabled: false` evita buscar (e materializar) um mês que ainda não se sabe qual é. */
+export function useMonth(month: string, enabled = true) {
   return useQuery({
     queryKey: ['month', month],
     queryFn: ({ signal }) => api.get(`/months/${month}`, monthResponseSchema, signal),
     placeholderData: (previous) => previous,
+    enabled,
   })
 }
 

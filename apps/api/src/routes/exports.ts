@@ -8,7 +8,7 @@ import {
   type ExportTable,
   type RestoreResponse,
 } from '@orla/contracts'
-import type { Prisma, PrismaClient } from '@orla/db'
+import { Prisma, type PrismaClient } from '@orla/db'
 import { Router } from 'express'
 import { notFound, validationError } from '../lib/errors.ts'
 import { nextMonthDate } from '../lib/finance.ts'
@@ -170,6 +170,7 @@ type ColumnType =
   | 'decimal'
   | 'decimalOrNull'
   | 'jsonOrNull'
+  | 'json'
 const COLUMNS: Record<string, Record<string, ColumnType>> = {
   assetClasses: { id: 'string', name: 'string', kind: 'string', color: 'string', sortOrder: 'int' },
   assets: {
@@ -200,6 +201,25 @@ const COLUMNS: Record<string, Record<string, ColumnType>> = {
     splitRatio: 'decimalOrNull',
     notes: 'stringOrNull',
     source: 'string',
+    contributionPlanId: 'stringOrNull',
+  },
+  contributionPlans: {
+    id: 'string',
+    competenceMonth: 'date',
+    name: 'string',
+    totalCents: 'cents',
+    status: 'string',
+    classSplit: 'json',
+    executedAt: 'dateOrNull',
+  },
+  contributions: {
+    id: 'string',
+    date: 'date',
+    competenceMonth: 'date',
+    amountCents: 'cents',
+    accountId: 'stringOrNull',
+    notes: 'stringOrNull',
+    contributionPlanId: 'stringOrNull',
   },
   dividends: {
     id: 'string',
@@ -297,7 +317,8 @@ const COLUMNS: Record<string, Record<string, ColumnType>> = {
 /** Campos que apontam para outros cadastros (precisam ser do mesmo usuário). */
 const REFS: Record<string, Record<string, string>> = {
   assets: { assetClassId: 'assetClasses', accountId: 'accounts' },
-  assetTrades: { assetId: 'assets' },
+  assetTrades: { assetId: 'assets', contributionPlanId: 'contributionPlans' },
+  contributions: { accountId: 'accounts', contributionPlanId: 'contributionPlans' },
   dividends: { assetId: 'assets' },
   creditCards: { accountId: 'accounts' },
   categories: { parentId: 'categories' },
@@ -334,8 +355,10 @@ const TABLE_ORDER = [
   'transactions',
   'assetClasses',
   'assets',
+  'contributionPlans',
   'assetTrades',
   'dividends',
+  'contributions',
 ] as const
 type Table = (typeof TABLE_ORDER)[number]
 
@@ -397,6 +420,12 @@ function coerce(table: Table, record: Record<string, unknown>): Record<string, u
       case 'jsonOrNull':
         out[key] = typeof value === 'object' ? value : null
         break
+      case 'json':
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+          invalid(`${table}.${key}`)
+        }
+        out[key] = value
+        break
       case 'strings':
         out[key] = Array.isArray(value)
           ? value.filter((item) => typeof item === 'string').slice(0, 20)
@@ -430,8 +459,88 @@ function delegate(tx: Prisma.TransactionClient, table: Table): Delegate {
     assets: tx.asset,
     assetTrades: tx.assetTrade,
     dividends: tx.dividend,
+    contributionPlans: tx.contributionPlan,
+    contributions: tx.contribution,
   }
   return map[table] as Delegate
+}
+
+const PLAN_ITEM_MODES = ['by_value', 'by_quantity']
+const DECIMAL = /^\d+(\.\d+)?$/
+
+/**
+ * Itens das simulações (não têm user_id: pertencem ao plano). Só entram itens de planos que
+ * ficaram com este usuário e que apontam para ativos dele (ou ativo novo). A simulação
+ * principal de cada mês volta a ser a do backup, se o mês ainda não tiver uma.
+ */
+async function restorePlanItems(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  mode: 'merge' | 'replace',
+  owned: Map<Table, Set<string>>,
+  data: {
+    contributionPlanItems?: Record<string, unknown>[]
+    contributionPlans?: Record<string, unknown>[]
+  },
+  counts: RestoreResponse,
+): Promise<void> {
+  const plans = owned.get('contributionPlans') ?? new Set<string>()
+  const assets = owned.get('assets') ?? new Set<string>()
+  const trades = owned.get('assetTrades') ?? new Set<string>()
+  for (const record of data.contributionPlanItems ?? []) {
+    const id = String(record.id)
+    const planId = String(record.planId)
+    if (!UUID.test(id) || !plans.has(planId)) continue
+    const assetId =
+      typeof record.assetId === 'string' && assets.has(record.assetId) ? record.assetId : null
+    const newAsset =
+      record.newAsset && typeof record.newAsset === 'object'
+        ? (record.newAsset as Prisma.InputJsonValue)
+        : null
+    if (!assetId && !newAsset) continue
+    if (!PLAN_ITEM_MODES.includes(String(record.mode))) invalid('contributionPlanItems.mode')
+    for (const key of ['quantity', 'unitPrice']) {
+      if (!DECIMAL.test(String(record[key]))) invalid(`contributionPlanItems.${key}`)
+    }
+    if (!Number.isSafeInteger(record.valueCents) || (record.valueCents as number) < 0) {
+      invalid('contributionPlanItems.valueCents')
+    }
+    const executedAt = record.executedAt ? new Date(String(record.executedAt)) : null
+    const item = {
+      planId,
+      assetId,
+      newAsset: newAsset ?? Prisma.JsonNull,
+      mode: String(record.mode),
+      quantity: String(record.quantity),
+      unitPrice: String(record.unitPrice),
+      valueCents: BigInt(record.valueCents as number),
+      sortOrder: Number.isInteger(record.sortOrder) ? (record.sortOrder as number) : 0,
+      executedTradeId:
+        typeof record.executedTradeId === 'string' && trades.has(record.executedTradeId)
+          ? record.executedTradeId
+          : null,
+      executedAt: executedAt && !Number.isNaN(executedAt.getTime()) ? executedAt : null,
+    }
+    const exists = await tx.contributionPlanItem.findUnique({
+      where: { id },
+      select: { plan: { select: { userId: true } } },
+    })
+    if (exists && exists.plan.userId !== userId) continue
+    if (exists && mode === 'merge') continue
+    await tx.contributionPlanItem.upsert({ where: { id }, create: { id, ...item }, update: item })
+    if (exists) counts.updated += 1
+    else counts.created += 1
+  }
+  for (const record of data.contributionPlans ?? []) {
+    const id = String(record.id)
+    if (record.isPrimary !== true || !plans.has(id)) continue
+    const plan = await tx.contributionPlan.findUnique({ where: { id } })
+    if (!plan || plan.userId !== userId) continue
+    const taken = await tx.contributionPlan.count({
+      where: { userId, competenceMonth: plan.competenceMonth, isPrimary: true, deletedAt: null },
+    })
+    if (taken === 0) await tx.contributionPlan.update({ where: { id }, data: { isPrimary: true } })
+  }
 }
 
 /** /exports, /backup, /restore (RE-01, RE-02). */
@@ -483,6 +592,8 @@ export function exportsRouter(prisma: PrismaClient): Router {
       assets,
       assetTrades,
       dividends,
+      contributionPlans,
+      contributions,
     ] = await Promise.all([
       prisma.userSettings.findUnique({ where: { userId } }),
       prisma.account.findMany({ where: live }),
@@ -504,6 +615,8 @@ export function exportsRouter(prisma: PrismaClient): Router {
         orderBy: [{ tradeDate: 'asc' }, { createdAt: 'asc' }],
       }),
       prisma.dividend.findMany({ where: live }),
+      prisma.contributionPlan.findMany({ where: live, include: { items: true } }),
+      prisma.contribution.findMany({ where: live }),
     ])
     const body: Backup = {
       app: 'orla',
@@ -524,6 +637,9 @@ export function exportsRouter(prisma: PrismaClient): Router {
         assets: assets.map(plain),
         assetTrades: assetTrades.map(plain),
         dividends: dividends.map(plain),
+        contributionPlans: contributionPlans.map(({ items: _items, ...plan }) => plain(plan)),
+        contributionPlanItems: contributionPlans.flatMap((plan) => plan.items.map(plain)),
+        contributions: contributions.map(plain),
       },
     }
     res.setHeader(
@@ -671,6 +787,8 @@ export function exportsRouter(prisma: PrismaClient): Router {
           if (exists) counts.updated += 1
           else counts.created += 1
         }
+
+        await restorePlanItems(tx, userId, mode, owned, backup.data, counts)
 
         // Metas de alocação: só das classes que ficaram com este usuário.
         const myClasses = owned.get('assetClasses') ?? new Set<string>()

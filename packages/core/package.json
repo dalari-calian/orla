@@ -9,7 +9,8 @@
     "./finance": "./src/finance/index.ts",
     "./import": "./src/import/index.ts",
     "./portfolio": "./src/portfolio/index.ts",
-    "./feedback": "./src/feedback/index.ts"
+    "./feedback": "./src/feedback/index.ts",
+    "./contribution": "./src/contribution/index.ts"
   },
   "scripts": {
     "test": "vitest run --coverage",

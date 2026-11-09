@@ -109,7 +109,7 @@ export const assetSchema = z.object({
 })
 export type Asset = z.infer<typeof assetSchema>
 
-const tickerSchema = z
+export const tickerSchema = z
   .string()
   .trim()
   .transform(normalizeTicker)

@@ -256,6 +256,9 @@ export const backupSchema = z.object({
     // Carteira (Fase 5). Backups antigos não têm: vazio.
     assetClasses: z.array(z.record(z.string(), z.unknown())).default([]),
     targetAllocations: z.array(z.record(z.string(), z.unknown())).default([]),
+    contributionPlans: z.array(z.record(z.string(), z.unknown())).default([]),
+    contributionPlanItems: z.array(z.record(z.string(), z.unknown())).default([]),
+    contributions: z.array(z.record(z.string(), z.unknown())).default([]),
     assets: z.array(z.record(z.string(), z.unknown())).default([]),
     assetTrades: z.array(z.record(z.string(), z.unknown())).default([]),
     dividends: z.array(z.record(z.string(), z.unknown())).default([]),

@@ -216,6 +216,8 @@ Aportes **externos** — dinheiro novo que entra na carteira vindo do salário. 
 
 > Por padrão, ao efetivar uma simulação de aporte, o sistema cria **um `contribution`** com o total + as `asset_trades`. O usuário também pode lançar aporte manual.
 
+> **Fase 6:** `contribution_plans.is_primary` (uma principal por mês: índice parcial único) e `deleted_at`. `contribution_plan_items` ganhou `new_asset` (jsonb `{ticker, name, assetClassId}` para ativo que ainda não existe; CHECK `asset_id` ou `new_asset`), `executed_trade_id` e `executed_at` (efetivação parcial). `contributions` tem `deleted_at`. As restrições CHECK das tabelas novas (aporte e relatos) estão na migration `restricoes_aporte_relatos`.
+
 ### `contribution_plans` / `contribution_plan_items`
 
 Simulações salvas.

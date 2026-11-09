@@ -7,6 +7,7 @@ import {
   CircleCheck,
   LayoutDashboard,
   Minus,
+  PiggyBank,
   Plus,
   Receipt,
   ReceiptText,
@@ -115,14 +116,19 @@ function Shortcut({
   label,
   to,
   onClick,
+  wide = false,
 }: {
   icon: LucideIcon
   label: string
   to?: string
   onClick?: () => void
+  /** Ocupa a linha inteira da grade. */
+  wide?: boolean
 }) {
-  const className =
-    'press flex min-h-20 flex-col items-start justify-between gap-2 rounded-card bg-surface-2 p-3 text-left text-subhead font-medium'
+  const className = cn(
+    'press flex min-h-20 flex-col items-start justify-between gap-2 rounded-card bg-surface-2 p-3 text-left text-subhead font-medium',
+    wide && 'col-span-2',
+  )
   const content = (
     <>
       <Icon className="size-5 text-accent" aria-hidden />
@@ -142,7 +148,7 @@ function Shortcut({
 
 /**
  * 4. Atalhos: lançar gasto/receita, cadastrar conta fixa ou entrada fixa (salário) sem passar
- * por Ajustes, e ir ao dashboard/projeção. Simular aporte e Fazer balanço chegam nas fases 6 e 7.
+ * por Ajustes, ir ao dashboard/projeção e simular o aporte. Fazer balanço chega na fase 7.
  */
 function Shortcuts() {
   const { openNew } = useEntrySheet()
@@ -165,6 +171,7 @@ function Shortcuts() {
         />
         <Shortcut icon={LayoutDashboard} label="Dashboard" to="/financas/dashboard" />
         <Shortcut icon={ChartLine} label="Projeção" to="/financas/projecao" />
+        <Shortcut icon={PiggyBank} label="Simular aporte" to="/aporte" wide />
       </div>
       <NewRecurringSheet kind={recurringKind} onClose={() => setRecurringKind(null)} />
     </Card>

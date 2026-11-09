@@ -73,6 +73,18 @@ const implemented: RouteObject[] = [
     lazy: async () => ({ Component: (await import('@/features/imports/ImportPage')).ImportPage }),
   },
   {
+    path: '/aporte',
+    lazy: async () => ({
+      Component: (await import('@/features/contribution/AportePage')).AportePage,
+    }),
+  },
+  {
+    path: '/aporte/:planId',
+    lazy: async () => ({
+      Component: (await import('@/features/contribution/SimulatorPage')).SimulatorPage,
+    }),
+  },
+  {
     path: '/config/feedback',
     lazy: async () => ({
       Component: (await import('@/features/feedback/FeedbackPage')).FeedbackPage,
@@ -189,7 +201,6 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <HomePage /> },
-          sectionRoute('aporte'),
           sectionRoute('balanco'),
           { path: '/mais', element: <MorePage /> },
           ...implemented,

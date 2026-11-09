@@ -42,6 +42,8 @@ model User {
   assetTrades        AssetTrade[]
   dividends          Dividend[]
   feedback           Feedback[]
+  contributionPlans  ContributionPlan[]
+  contributions      Contribution[]
 
   @@map("users")
 }
@@ -606,4 +608,75 @@ model FeedbackEvent {
 
   @@index([feedbackId, createdAt])
   @@map("feedback_events")
+}
+
+// ─── Aporte (Fase 6, docs/06) ───────────────────────────────────────────────
+
+/// Simulação de aporte (o "carrinho"). Rascunho salvo sozinho; efetivar cria as compras.
+model ContributionPlan {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  competenceMonth DateTime  @map("competence_month") @db.Date
+  name            String
+  totalCents      BigInt    @map("total_cents")
+  /// draft · executed · discarded
+  status          String    @default("draft")
+  /// { assetClassId: pct } (pct em texto decimal, soma 100)
+  classSplit      Json      @map("class_split")
+  /// A simulação principal do mês (RA-30).
+  isPrimary       Boolean   @default(false) @map("is_primary")
+  executedAt      DateTime? @map("executed_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items ContributionPlanItem[]
+
+  @@index([userId, competenceMonth])
+  @@map("contribution_plans")
+}
+
+/// Item da simulação. Ativo novo (RA-11) fica em new_asset até a efetivação criar o ativo.
+model ContributionPlanItem {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  planId          String    @map("plan_id") @db.Uuid
+  assetId         String?   @map("asset_id") @db.Uuid
+  /// { ticker, name, assetClassId } para ativo que ainda não existe.
+  newAsset        Json?     @map("new_asset")
+  /// by_value · by_quantity
+  mode            String
+  quantity        Decimal   @db.Decimal(20, 8)
+  unitPrice       Decimal   @map("unit_price") @db.Decimal(20, 8)
+  valueCents      BigInt    @map("value_cents")
+  sortOrder       Int       @default(0) @map("sort_order")
+  /// Efetivação parcial (RA-32): a compra criada para este item.
+  executedTradeId String?   @map("executed_trade_id") @db.Uuid
+  executedAt      DateTime? @map("executed_at") @db.Timestamptz(3)
+
+  plan ContributionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, sortOrder])
+  @@map("contribution_plan_items")
+}
+
+/// Aporte externo: dinheiro novo que entra na carteira (base da rentabilidade real, Fase 7).
+model Contribution {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  date               DateTime  @db.Date
+  competenceMonth    DateTime  @map("competence_month") @db.Date
+  /// Negativo = resgate para fora da carteira.
+  amountCents        BigInt    @map("amount_cents")
+  accountId          String?   @map("account_id") @db.Uuid
+  notes              String?
+  contributionPlanId String?   @map("contribution_plan_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, competenceMonth])
+  @@map("contributions")
 }
