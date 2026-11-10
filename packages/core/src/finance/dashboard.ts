@@ -33,7 +33,8 @@ export function effectiveExpenses<T extends DashboardTransaction>(
 ): ExpenseShare<T>[] {
   const out: ExpenseShare<T>[] = []
   for (const item of transactions) {
-    if (item.type !== 'expense') continue
+    // Saldo do mês anterior não é gasto (RF-54): fora das quebras por categoria, conta etc.
+    if (item.type !== 'expense' || item.nature === 'carryover') continue
     const hasChildren =
       item.nature === 'planned' && transactions.some((other) => other.parentPlannedId === item.id)
     const amountCents = hasChildren
@@ -198,6 +199,7 @@ export function addSummaries(a: MonthSummary, b: MonthSummary): MonthSummary {
     savingsGoalCents: a.savingsGoalCents + b.savingsGoalCents,
     goalInvestedCents: a.goalInvestedCents + b.goalInvestedCents,
     goalRemainingCents: a.goalRemainingCents + b.goalRemainingCents,
+    carryoverCents: a.carryoverCents + b.carryoverCents,
     projectedSurplusCents,
     currentBalanceCents: a.currentBalanceCents + b.currentBalanceCents,
     freeToSpendCents: Math.max(projectedSurplusCents, 0),
@@ -213,6 +215,7 @@ export const EMPTY_SUMMARY: MonthSummary = {
   savingsGoalCents: 0,
   goalInvestedCents: 0,
   goalRemainingCents: 0,
+  carryoverCents: 0,
   projectedSurplusCents: 0,
   currentBalanceCents: 0,
   freeToSpendCents: 0,
@@ -304,7 +307,9 @@ export interface ProjectionRow {
   plannedCents: Cents
   variableCents: Cents
   goalCents: Cents
-  /** entradas − saídas − meta */
+  /** Saldo trazido do mês anterior, com sinal (RF-54); normalmente só no mês corrente. */
+  carryoverCents: Cents
+  /** entradas − saídas − meta + saldo anterior */
   surplusCents: Cents
 }
 
@@ -332,6 +337,7 @@ export function projectionRow(
     variableCents: byNature('variable') + byNature('extra'),
     // A meta reserva o maior entre o planejado e o já investido (como na sobra do mês).
     goalCents: Math.max(summary.savingsGoalCents, summary.goalInvestedCents),
+    carryoverCents: summary.carryoverCents,
     surplusCents: summary.projectedSurplusCents,
   }
 }

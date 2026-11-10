@@ -1,0 +1,35 @@
+# MODELO — este arquivo vai para o repositório PRIVADO `orla-backups`, no mesmo caminho
+# (.github/workflows/backup-schedule.yml). Aqui no `orla` ele não roda: o GitHub só
+# executa workflows da pasta .github/workflows da raiz.
+#
+# Backups agendados (RE-03, docs/16-deploy-e-backup.md): 00h e 12h de Brasília, em 14
+# gavetas que se sobrescrevem a cada semana ("segunda-00h", "segunda-12h", …).
+#
+# DESLIGADO até existir a variável BACKUP_ENABLED=true neste repositório
+# (Settings › Secrets and variables › Actions › Variables).
+name: Backup agendado
+
+on:
+  schedule:
+    # Horário em UTC. Brasília é UTC−3 o ano todo (sem horário de verão desde 2019).
+    - cron: '0 3 * * *' # 00h em Brasília
+    - cron: '0 15 * * *' # 12h em Brasília
+  # Backup na hora (Actions › Backup agendado › Run workflow).
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    if: vars.BACKUP_ENABLED == 'true'
+    # A lógica mora no repositório do app (versionada junto com o código).
+    uses: dalari-calian/orla/.github/workflows/backup.yml@main
+    permissions:
+      contents: write
+    with:
+      slot: auto
+      backups_repo: ${{ github.repository }}
+    secrets:
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}

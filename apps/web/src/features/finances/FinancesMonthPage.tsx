@@ -1,4 +1,4 @@
-import { plannedProgress } from '@orla/core'
+import { monthName, plannedProgress } from '@orla/core'
 import { formatBRL } from '@orla/core/money'
 import type { MonthResponse, Transaction, UpdateMonthSettingsRequest } from '@orla/contracts'
 import {
@@ -38,6 +38,7 @@ import { cn } from '@/lib/cn'
 import { NewRecurringSheet } from './NewRecurringSheet'
 import type { RecurringKind } from './RecurringTemplatesPage'
 import { useMonth, useTransactionMutations, useUpdateMonthSettings } from './api'
+import { CarryoverBanner, CarryoverSheet } from './Carryover'
 import { useEntrySheet } from './EntrySheet'
 import { monthLabel, useMonthParam } from './labels'
 import { MonthSwitcher } from './MonthSwitcher'
@@ -55,7 +56,17 @@ const filterOptions = [
 
 /** Seções colapsáveis da lista do mês (docs/10). */
 const sectionDefs = [
-  { key: 'income', title: 'Receitas', match: (t: Transaction) => t.type === 'income' },
+  // Saldo do mês anterior (RF-54) não é renda nem gasto: seção própria, no topo.
+  {
+    key: 'carryover',
+    title: 'Saldo anterior',
+    match: (t: Transaction) => t.nature === 'carryover',
+  },
+  {
+    key: 'income',
+    title: 'Receitas',
+    match: (t: Transaction) => t.type === 'income' && t.nature !== 'carryover',
+  },
   {
     key: 'fixed',
     title: 'Fixas',
@@ -149,6 +160,20 @@ function SummaryCard({ data, onEditGoal }: { data: MonthResponse; onEditGoal: ()
           />
         </button>
       </div>
+      {summary.carryoverCents !== 0 && (
+        <div className="flex items-center justify-between border-t border-separator pt-3 text-subhead">
+          <span className="text-text-2">Saldo de {monthName(data.carryover.previousMonth)}</span>
+          <span
+            className={cn(
+              'font-medium tabular',
+              summary.carryoverCents > 0 ? 'text-positive' : 'text-negative',
+            )}
+          >
+            {summary.carryoverCents > 0 ? '+' : ''}
+            {formatBRL(summary.carryoverCents)}
+          </span>
+        </div>
+      )}
       <div className="flex items-center justify-between border-t border-separator pt-3 text-subhead">
         <span className="text-text-2">Saldo do mês até agora</span>
         <span className="font-medium tabular">{formatBRL(summary.currentBalanceCents)}</span>
@@ -457,6 +482,7 @@ export function FinancesMonthPage() {
   const [goalOpen, setGoalOpen] = useState(false)
   const [cardOpen, setCardOpen] = useState(false)
   const [recurringKind, setRecurringKind] = useState<RecurringKind | null>(null)
+  const [carryoverOpen, setCarryoverOpen] = useState<Transaction | null>(null)
 
   const categoryById = useMemo(
     () => new Map((categoryList.data ?? []).map((category) => [category.id, category])),
@@ -526,6 +552,7 @@ export function FinancesMonthPage() {
           ) : query.isPending ? (
             <Skeleton className="h-56 rounded-card" />
           ) : null}
+          {query.data && <CarryoverBanner month={month} carryover={query.data.carryover} />}
 
           <nav aria-label="Atalhos de Finanças" className="grid grid-cols-2 gap-3">
             <button
@@ -693,7 +720,9 @@ export function FinancesMonthPage() {
                                   ? `em ${parent.description}`
                                   : undefined
                             }
-                            onOpen={() => openEdit(item)}
+                            onOpen={() =>
+                              item.nature === 'carryover' ? setCarryoverOpen(item) : openEdit(item)
+                            }
                             onToggleSettled={() => toggle(item)}
                             toggling={pendingId === item.id}
                           />
@@ -710,6 +739,15 @@ export function FinancesMonthPage() {
 
       <NewCardSheet open={cardOpen} onClose={() => setCardOpen(false)} />
       <NewRecurringSheet kind={recurringKind} onClose={() => setRecurringKind(null)} />
+
+      {query.data && (
+        <CarryoverSheet
+          month={month}
+          transaction={carryoverOpen}
+          carryover={query.data.carryover}
+          onClose={() => setCarryoverOpen(null)}
+        />
+      )}
 
       {query.data && goalOpen && (
         <MonthGoalSheet

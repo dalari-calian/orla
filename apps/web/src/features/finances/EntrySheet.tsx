@@ -17,7 +17,8 @@ import { Sheet } from '@/components/ui/Sheet'
 import { Skeleton } from '@/components/ui/States'
 import { useToast } from '@/components/ui/Toast'
 import { errorMessage } from '@/lib/api'
-import { useInstallmentPlanMutations, useTransactionMutations } from './api'
+import { useInstallmentPlanMutations, useTransactionMutations, type PlanType } from './api'
+import type { InstallmentPlanDefaults } from './InstallmentPlanForm'
 import type { TransactionKind } from './TransactionForm'
 
 // Os formulários só carregam quando o sheet abre (RNF-02: bundle inicial enxuto).
@@ -32,12 +33,21 @@ const InstallmentPlanForm = lazy(async () => ({
 export type EntryKind = TransactionKind | 'installment'
 
 type EntryState =
-  | { mode: 'new'; kind: EntryKind; template?: Transaction | undefined }
+  | {
+      mode: 'new'
+      kind: EntryKind
+      template?: Transaction | undefined
+      /** Só no parcelado: começa em "A pagar" ou "A receber", com valores sugeridos. */
+      planType?: PlanType | undefined
+      planDefaults?: InstallmentPlanDefaults | undefined
+    }
   | { mode: 'edit'; transaction: Transaction }
   | null
 
 interface EntryContextValue {
   openNew: (kind?: EntryKind, template?: Transaction) => void
+  /** Novo parcelado já na direção certa (ex.: "Dividir com alguém" → a receber). */
+  openNewPlan: (planType: PlanType, defaults?: InstallmentPlanDefaults) => void
   openEdit: (transaction: Transaction) => void
 }
 
@@ -102,6 +112,10 @@ export function EntryProvider({ children }: { children: ReactNode }) {
         setSlide(null)
         setState({ mode: 'new', kind, template })
       },
+      openNewPlan: (planType, planDefaults) => {
+        setSlide(null)
+        setState({ mode: 'new', kind: 'installment', planType, planDefaults })
+      },
       openEdit: (transaction) => {
         setSlide(null)
         setState({ mode: 'edit', transaction })
@@ -117,12 +131,12 @@ export function EntryProvider({ children }: { children: ReactNode }) {
       : state.kind
     : 'expense'
   const title = editing
-    ? editing.type === 'income'
-      ? 'Editar receita'
-      : editing.nature === 'planned'
-        ? 'Editar planejamento'
-        : editing.nature === 'installment'
-          ? `Parcela ${editing.installmentNumber ?? ''}/${editing.installmentsCount ?? ''}`
+    ? editing.nature === 'installment'
+      ? `Parcela ${editing.installmentNumber ?? ''}/${editing.installmentsCount ?? ''}`
+      : editing.type === 'income'
+        ? 'Editar receita'
+        : editing.nature === 'planned'
+          ? 'Editar planejamento'
           : 'Editar despesa'
     : titles[kind]
 
@@ -181,7 +195,9 @@ export function EntryProvider({ children }: { children: ReactNode }) {
           <p className="mb-4 flex items-start gap-2 rounded-field bg-accent/10 px-3 py-2.5 text-footnote text-text-2">
             <CalendarRange className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
             <span>
-              Parcela de um parcelamento. Para mudar o total, quitar ou cancelar,{' '}
+              {editing.type === 'income'
+                ? 'Parcela de um parcelado a receber. Para mudar o total, receber tudo ou cancelar,'
+                : 'Parcela de um parcelamento. Para mudar o total, quitar ou cancelar,'}{' '}
               <Link
                 to={`/financas/parcelamentos/${editing.installmentPlanId}`}
                 className="font-medium text-accent"
@@ -208,13 +224,18 @@ export function EntryProvider({ children }: { children: ReactNode }) {
             {state && kind === 'installment' && state.mode === 'new' && (
               <InstallmentPlanForm
                 key="installment"
+                defaultType={state.planType}
+                defaults={state.planDefaults}
                 submitting={plans.create.isPending}
                 error={plans.create.error}
                 onCreate={async (values) => {
                   const detail = await plans.create.mutateAsync(values)
                   close()
                   toast({
-                    message: 'Parcelamento criado',
+                    message:
+                      detail.plan.type === 'income'
+                        ? 'Parcelado a receber criado'
+                        : 'Parcelamento criado',
                     action: {
                       label: 'Ver',
                       onClick: () => void navigate(`/financas/parcelamentos/${detail.plan.id}`),

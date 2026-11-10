@@ -1,4 +1,6 @@
+import type { CarryoverMode } from '@orla/core'
 import { updateProfileRequestSchema, type UpdateProfileRequest } from '@orla/contracts'
+import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, Monitor, Moon, Sun } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -11,7 +13,10 @@ import { GroupedList, ListRow } from '@/components/ui/GroupedList'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Sheet } from '@/components/ui/Sheet'
 import { useToast } from '@/components/ui/Toast'
+import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useLogout, useMe, useUpdateProfile } from '@/features/auth/api'
+import { invalidateFinances } from '@/features/finances/api'
+import { useSettings, useUpdateSettings } from '@/features/registrations/api'
 import { errorMessage } from '@/lib/api'
 import { zodResolver } from '@/lib/form'
 import { useTheme, type ThemePreference } from '@/lib/theme'
@@ -98,6 +103,59 @@ function ProfileCard() {
   )
 }
 
+const carryoverOptions = [
+  { value: 'ask', label: 'Perguntar' },
+  { value: 'auto', label: 'Automático' },
+  { value: 'off', label: 'Nunca' },
+] as const satisfies readonly { value: CarryoverMode; label: string }[]
+
+const carryoverHelp: Record<CarryoverMode, string> = {
+  ask: 'Na virada do mês, o Orla mostra quanto sobrou (ou faltou) e você decide se leva para o mês seguinte.',
+  auto: 'Quando o mês termina, o saldo entra sozinho no mês seguinte e se ajusta se o mês anterior mudar.',
+  off: 'Cada mês começa do zero. Você ainda pode lançar o saldo à mão como receita.',
+}
+
+/** RF-54: levar o saldo do mês anterior — perguntar (padrão), automático ou nunca. */
+function CarryoverModeCard() {
+  const settings = useSettings()
+  const update = useUpdateSettings()
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  const mode = settings.data?.carryoverMode ?? 'ask'
+
+  return (
+    <Card>
+      <CardHeader title="Saldo do mês anterior" />
+      {settings.isPending ? (
+        <Skeleton className="h-11 w-full" />
+      ) : settings.isError ? (
+        <ErrorState
+          description={errorMessage(settings.error)}
+          onRetry={() => void settings.refetch()}
+        />
+      ) : (
+        <div className="space-y-3">
+          <SegmentedControl
+            label="Levar o que sobrou para o mês seguinte"
+            options={carryoverOptions}
+            value={mode}
+            onChange={(value) =>
+              update.mutate(
+                { carryoverMode: value },
+                {
+                  onSuccess: () => void invalidateFinances(queryClient),
+                  onError: (error) => toast({ message: errorMessage(error), tone: 'error' }),
+                },
+              )
+            }
+          />
+          <p className="text-footnote text-text-2">{carryoverHelp[mode]}</p>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export function ConfigPage() {
   const [theme, setTheme] = useTheme()
 
@@ -116,6 +174,7 @@ export function ConfigPage() {
               onChange={setTheme}
             />
           </Card>
+          <CarryoverModeCard />
           <SystemStatus />
         </div>
 

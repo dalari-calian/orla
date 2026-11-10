@@ -131,14 +131,16 @@ function Shortcut({
   /** Destaque (ex.: balanço do mês ainda não feito). */
   highlight?: boolean
 }) {
+  // `cn` só junta classes (não resolve conflito): fundo e cor saem de um lado OU do outro,
+  // senão o `bg-surface-2` vence o `bg-accent` no CSS e sobra texto branco no cinza.
   const className = cn(
-    'press flex min-h-20 flex-col items-start justify-between gap-2 rounded-card bg-surface-2 p-3 text-left text-subhead font-medium',
+    'press flex min-h-20 flex-col items-start justify-between gap-2 rounded-card p-3 text-left text-subhead font-medium',
     wide && 'col-span-2',
-    highlight && 'bg-accent text-white [&_svg]:text-white',
+    highlight ? 'bg-accent text-white' : 'bg-surface-2 text-text',
   )
   const content = (
     <>
-      <Icon className="size-5 text-accent" aria-hidden />
+      <Icon className={cn('size-5', highlight ? 'text-white' : 'text-accent')} aria-hidden />
       {label}
     </>
   )

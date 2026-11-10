@@ -1,4 +1,9 @@
-import { CONTRIBUTION_TIMINGS, type ContributionTiming } from '@orla/core'
+import {
+  CARRYOVER_MODES,
+  CONTRIBUTION_TIMINGS,
+  type CarryoverMode,
+  type ContributionTiming,
+} from '@orla/core'
 import {
   updateSettingsRequestSchema,
   type SavingsGoal,
@@ -34,6 +39,9 @@ function toResponse(row: SettingsRow): SettingsResponse {
       : 'end',
     returnContributionSource:
       row.returnContributionSource === 'trades' ? 'trades' : 'contributions',
+    carryoverMode: (CARRYOVER_MODES as readonly string[]).includes(row.carryoverMode)
+      ? (row.carryoverMode as CarryoverMode)
+      : 'ask',
   }
 }
 
@@ -68,6 +76,7 @@ export function settingsRouter(prisma: PrismaClient): Router {
     if (input.returnContributionSource) {
       data.returnContributionSource = input.returnContributionSource
     }
+    if (input.carryoverMode) data.carryoverMode = input.carryoverMode
     if (input.onboardingCompleted !== undefined) {
       data.onboardingCompletedAt = input.onboardingCompleted ? new Date() : null
     }

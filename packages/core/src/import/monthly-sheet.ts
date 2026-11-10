@@ -101,6 +101,14 @@ const isNumberCell = (cell: Cell) =>
  * Passo 1: encontra os blocos de mês e lê as linhas de entrada, despesa e "valor economizar".
  * `year` é o ano dos blocos (vem do nome da aba, ex.: "FINANÇAS - 2026").
  */
+/**
+ * RF-57: "VALOR MÊS ANTERIOR", "SALDO DO MÊS ANTERIOR", "SOBRA MÊS ANTERIOR" — o saldo
+ * levado à mão na planilha vira o lançamento de saldo anterior do app (não é renda).
+ */
+export function isCarryoverLine(normalizedDescription: string): boolean {
+  return /^(valor|saldo|sobra)( d[oe])? mes anterior\b/.test(normalizedDescription)
+}
+
 export function readMonthlySheet(
   grid: readonly (readonly Cell[])[],
   year: number,
@@ -368,11 +376,12 @@ export function buildMonthlyDrafts(
       continue
     }
     if (line.section === 'income') {
-      const salary = normalizeText(line.description).startsWith('salario')
+      const text = normalizeText(line.description)
+      const salary = text.startsWith('salario')
       const draft: TransactionDraft = {
         kind: 'transaction',
         type: 'income',
-        nature: salary ? 'fixed' : 'extra',
+        nature: salary ? 'fixed' : isCarryoverLine(text) ? 'carryover' : 'extra',
         status: compareMonths(line.month, options.currentMonth) <= 0 ? 'settled' : 'forecast',
         description: line.description.slice(0, 80),
         amountCents: Math.abs(line.amountCents ?? 0),

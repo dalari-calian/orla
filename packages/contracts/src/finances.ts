@@ -25,6 +25,8 @@ export const transactionNatureSchema = z.enum([
   'planned',
   'installment',
   'extra',
+  /** Saldo do mês anterior (RF-54) — só a API cria (POST /months/:month/carryover). */
+  'carryover',
 ])
 export type TransactionNature = z.infer<typeof transactionNatureSchema>
 export const transactionStatusSchema = z.enum(['forecast', 'settled'])
@@ -154,12 +156,33 @@ export const monthSummarySchema = z.object({
   goalInvestedCents: z.number().int(),
   /** Quanto falta investir para cumprir a meta. */
   goalRemainingCents: z.number().int(),
+  /** Saldo trazido do mês anterior, com sinal (RF-54); fora de entradas/saídas. */
+  carryoverCents: z.number().int(),
   projectedSurplusCents: z.number().int(),
   currentBalanceCents: z.number().int(),
   freeToSpendCents: z.number().int(),
   goalShortfallCents: z.number().int(),
 })
 export type MonthSummaryResponse = z.infer<typeof monthSummarySchema>
+
+/**
+ * Saldo do mês anterior (RF-55) visto a partir deste mês:
+ * `offer` = perguntar · `applied` = já levado e em dia · `stale` = o mês anterior mudou
+ * desde que foi levado · `none` = nada a mostrar.
+ */
+export const monthCarryoverSchema = z.object({
+  state: z.enum(['none', 'offer', 'applied', 'stale']),
+  previousMonth: competenceMonthSchema,
+  /** Saldo atual do mês anterior, com sinal — o que seria levado. */
+  previousBalanceCents: z.number().int(),
+  /** O que já foi levado para este mês, com sinal (null = nada). */
+  appliedCents: z.number().int().nullable(),
+  /** O mês anterior ainda não terminou: o valor pode mudar. */
+  previousMonthOpen: z.boolean(),
+  /** Lançamentos ainda previstos no mês anterior (o saldo ainda pode mudar). */
+  previousPendingCount: z.number().int(),
+})
+export type MonthCarryover = z.infer<typeof monthCarryoverSchema>
 
 /** GET /months/:month — materializa os modelos e devolve o mês inteiro. */
 export const monthResponseSchema = z.object({
@@ -173,6 +196,7 @@ export const monthResponseSchema = z.object({
     defaultSavingsGoal: savingsGoalSchema,
     notes: z.string().nullable(),
   }),
+  carryover: monthCarryoverSchema,
   transactions: z.array(transactionSchema),
 })
 export type MonthResponse = z.infer<typeof monthResponseSchema>
@@ -311,6 +335,8 @@ export const installmentIndicatorsSchema = z.object({
 
 export const installmentPlanSchema = z.object({
   id: idSchema,
+  /** `expense` = parcelado a pagar (compra); `income` = parcelado a receber. */
+  type: transactionTypeSchema,
   description: z.string(),
   payeeId: idSchema.nullable(),
   categoryId: idSchema.nullable(),
@@ -347,9 +373,12 @@ const installmentsCountSchema = z
 /**
  * POST /installment-plans (RF-40): informe o **total** ou o **valor da parcela**.
  * `currentInstallment` = "já estou na parcela k" (RF-43).
+ * `type: 'income'` = parcelado a receber (RF-49): sem cartão, `purchaseDate` é a data do
+ * 1º recebimento e as parcelas viram receitas.
  */
 export const createInstallmentPlanRequestSchema = z
   .object({
+    type: transactionTypeSchema.default('expense'),
     description: descriptionSchema,
     payeeId: idSchema.nullable().optional(),
     categoryId: idSchema.nullable().optional(),
@@ -372,7 +401,7 @@ export const createInstallmentPlanRequestSchema = z
         message: 'Informe o valor total ou o valor da parcela',
       })
     }
-    if (value.paymentMethod === 'credit' && !value.creditCardId) {
+    if (value.type === 'expense' && value.paymentMethod === 'credit' && !value.creditCardId) {
       ctx.addIssue({ code: 'custom', path: ['creditCardId'], message: 'Escolha o cartão' })
     }
     if (
@@ -413,7 +442,16 @@ export const payoffInstallmentPlanRequestSchema = z.object({
 })
 export type PayoffInstallmentPlanRequest = z.infer<typeof payoffInstallmentPlanRequestSchema>
 
-/** GET /installment-plans/summary (RF-45). */
+/** Filtro `?type=` da lista e do resumo: a pagar (padrão) ou a receber. */
+export const installmentPlanTypeQuerySchema = z.object({
+  type: transactionTypeSchema.default('expense'),
+})
+
+/**
+ * GET /installment-plans/summary?type= (RF-45). Em `income` os valores são "a receber":
+ * `payoffTotalCents` = falta receber, `monthly` = quanto entra por mês, `freeFromMonth` =
+ * mês seguinte ao último recebimento.
+ */
 export const installmentSummarySchema = z.object({
   payoffTotalCents: z.number().int(),
   activeCount: z.number().int(),

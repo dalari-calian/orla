@@ -509,6 +509,159 @@ describe('parcelamentos', () => {
   })
 })
 
+describe('parcelado a receber (RF-49)', () => {
+  // A namorada paga metade do presente (R$ 400 em 4×): R$ 200 em 4× de R$ 50.
+  const receivable = (body: Record<string, unknown> = {}) =>
+    agent.post('/api/v1/installment-plans').send({
+      type: 'income',
+      description: 'Ana — metade do presente',
+      purchaseDate: '2026-11-05',
+      totalCents: 20000,
+      installmentsCount: 4,
+      ...body,
+    })
+
+  it('gera receitas parceladas sem cartão, que entram nas entradas do mês', async () => {
+    const res = await receivable()
+    expect(res.status).toBe(201)
+    const detail = installmentPlanDetailSchema.parse(res.body)
+    expect(detail.plan).toMatchObject({
+      type: 'income',
+      paymentMethod: 'other',
+      creditCardId: null,
+      firstCompetenceMonth: '2026-11',
+    })
+    expect(
+      detail.installments.map((item) => [
+        item.type,
+        item.nature,
+        item.status,
+        item.amountCents,
+        item.competenceMonth,
+        item.date,
+      ]),
+    ).toEqual([
+      ['income', 'installment', 'forecast', 5000, '2026-11', '2026-11-05'],
+      ['income', 'installment', 'forecast', 5000, '2026-12', '2026-12-05'],
+      ['income', 'installment', 'forecast', 5000, '2027-01', '2027-01-05'],
+      ['income', 'installment', 'forecast', 5000, '2027-02', '2027-02-05'],
+    ])
+
+    const nov = await month('2026-11')
+    expect(nov.summary.incomeForecastCents).toBe(5000)
+    expect(nov.summary.expenseForecastCents).toBe(0)
+    expect(nov.transactions[0]).toMatchObject({
+      type: 'income',
+      installmentNumber: 1,
+      installmentsCount: 4,
+    })
+
+    // "Recebi" a 1ª e corrige o valor da 2ª à mão (receita parcelada aceita edição).
+    const [first, second] = detail.installments
+    expect((await agent.post(`/api/v1/transactions/${first?.id}/settle`)).status).toBe(200)
+    const edited = await agent
+      .patch(`/api/v1/transactions/${second?.id}`)
+      .send({ amountCents: 6000 })
+    expect(edited.status).toBe(200)
+    expect(edited.body).toMatchObject({ type: 'income', nature: 'installment', isOverride: true })
+
+    const after = installmentPlanDetailSchema.parse(
+      (await agent.get(`/api/v1/installment-plans/${detail.plan.id}`)).body,
+    )
+    expect(after.plan.indicators).toMatchObject({
+      currentNumber: 1,
+      paidCents: 5000,
+      remainingCents: 15000,
+      paidCount: 1,
+    })
+  })
+
+  it('a pagar e a receber ficam separados na lista e no resumo', async () => {
+    await receivable()
+    await agent.post('/api/v1/installment-plans').send({
+      description: 'Presente do irmão',
+      paymentMethod: 'credit',
+      creditCardId: cardId,
+      purchaseDate: '2026-11-01',
+      totalCents: 40000,
+      installmentsCount: 4,
+    })
+
+    const toPay = installmentSummarySchema.parse(
+      (await agent.get('/api/v1/installment-plans/summary')).body,
+    )
+    expect(toPay.payoffTotalCents).toBe(40000)
+    expect(toPay.monthly[0]).toEqual({ month: '2026-11', amountCents: 10000 })
+
+    const toReceive = installmentSummarySchema.parse(
+      (await agent.get('/api/v1/installment-plans/summary?type=income')).body,
+    )
+    expect(toReceive).toMatchObject({ payoffTotalCents: 20000, activeCount: 1 })
+    expect(toReceive.monthly[0]).toEqual({ month: '2026-11', amountCents: 5000 })
+    expect(toReceive.freeFromMonth).toBe('2027-03')
+
+    const list = async (query: string) =>
+      (await agent.get(`/api/v1/installment-plans${query}`)).body.data.map(
+        (plan: { description: string }) => plan.description,
+      )
+    expect(await list('')).toEqual(['Presente do irmão'])
+    expect(await list('?type=income')).toEqual(['Ana — metade do presente'])
+    expect((await agent.get('/api/v1/installment-plans?type=outro')).status).toBe(400)
+
+    // Mês: R$ 100 de parcela a pagar e R$ 50 a receber.
+    expect((await month('2026-11')).summary).toMatchObject({
+      incomeForecastCents: 5000,
+      expenseForecastCents: 10000,
+    })
+  })
+
+  it('recebi tudo antes: recebimento único e o resto sai', async () => {
+    const created = installmentPlanDetailSchema.parse((await receivable()).body)
+    const res = await agent
+      .post(`/api/v1/installment-plans/${created.plan.id}/payoff`)
+      .send({ amountCents: 20000, date: '2026-11-07' })
+    const detail = installmentPlanDetailSchema.parse(res.body)
+    expect(detail.plan).toMatchObject({ status: 'paid_off', payoffDiscountCents: 0 })
+    expect(detail.installments.filter((item) => item.status === 'forecast')).toEqual([])
+    expect(detail.installments.at(-1)).toMatchObject({
+      type: 'income',
+      description: 'Recebido antecipado: Ana — metade do presente',
+      amountCents: 20000,
+      competenceMonth: '2026-11',
+    })
+    expect((await month('2026-11')).summary.incomeSettledCents).toBe(20000)
+  })
+
+  it('editar recalcula as previstas; categoria precisa ser de receita', async () => {
+    const created = installmentPlanDetailSchema.parse((await receivable()).body)
+    const edited = installmentPlanDetailSchema.parse(
+      (
+        await agent
+          .patch(`/api/v1/installment-plans/${created.plan.id}`)
+          .send({ totalCents: 30000, installmentsCount: 3 })
+      ).body,
+    )
+    expect(
+      edited.installments.map((item) => [item.type, item.installmentNumber, item.amountCents]),
+    ).toEqual([
+      ['income', 1, 10000],
+      ['income', 2, 10000],
+      ['income', 3, 10000],
+    ])
+
+    const expenseCategory = await agent
+      .post('/api/v1/categories')
+      .send({ kind: 'expense', name: 'Teste despesa RF-49', icon: 'gift', color: '#FF9500' })
+    expect(expenseCategory.status).toBe(201)
+    expect((await receivable({ categoryId: expenseCategory.body.id })).status).toBe(400)
+    const incomeCategory = await agent
+      .post('/api/v1/categories')
+      .send({ kind: 'income', name: 'Teste receita RF-49', icon: 'gift', color: '#34C759' })
+    expect(incomeCategory.status).toBe(201)
+    expect((await receivable({ categoryId: incomeCategory.body.id })).status).toBe(201)
+  })
+})
+
 describe('fatura do cartão', () => {
   it('RF-31/32: total, datas, status, pagar e faturas futuras', async () => {
     // No crédito a compra nasce prevista; esta já foi marcada como paga à mão.

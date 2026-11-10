@@ -587,12 +587,25 @@ export function importsRouter(prisma: PrismaClient, clock: Clock): Router {
             const month = transactionMonth(draft, ctx)
             const template = templateFor(draft.type, draft.description, month)
             const id = randomUUID()
+            // RF-57: um saldo anterior por mês. Se o mês já tem, a linha entra como extra.
+            let nature: string = draft.nature
+            if (nature === 'carryover') {
+              const taken = await tx.transaction.count({
+                where: {
+                  userId,
+                  competenceMonth: competenceMonthToDate(month),
+                  nature: 'carryover',
+                  deletedAt: null,
+                },
+              })
+              if (taken > 0) nature = draft.type === 'income' ? 'extra' : 'variable'
+            }
             await tx.transaction.create({
               data: {
                 id,
                 userId,
                 type: draft.type,
-                nature: draft.nature,
+                nature,
                 status: draft.status,
                 description: draft.description,
                 amountCents: BigInt(draft.amountCents),

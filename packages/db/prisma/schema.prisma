@@ -77,6 +77,8 @@ model UserSettings {
   contributionTiming       String    @default("end") @map("contribution_timing")
   /// contributions · trades
   returnContributionSource String    @default("contributions") @map("return_contribution_source")
+  /// Saldo do mês anterior (RF-54): ask · auto · off
+  carryoverMode            String    @default("ask") @map("carryover_mode")
   currency                 String    @default("BRL")
   /// light · dark · system
   theme                    String    @default("system")
@@ -231,10 +233,13 @@ model RecurringTemplate {
 
 // ─── Finanças (Fase 2) ──────────────────────────────────────────────────────
 
-/// Uma compra parcelada (ex.: Nintendo Switch 12×). As parcelas são transactions.
+/// Uma compra parcelada (ex.: Nintendo Switch 12×) ou um valor a receber em parcelas
+/// (ex.: a namorada paga metade do presente em 4×). As parcelas são transactions.
 model InstallmentPlan {
   id                   String    @id @default(uuid(7)) @db.Uuid
   userId               String    @map("user_id") @db.Uuid
+  /// expense (a pagar) · income (a receber) — vira o `type` das parcelas.
+  type                 String    @default("expense")
   description          String
   payeeId              String?   @map("payee_id") @db.Uuid
   categoryId           String?   @map("category_id") @db.Uuid
@@ -264,7 +269,7 @@ model InstallmentPlan {
   account      Account?      @relation(fields: [accountId], references: [id])
   transactions Transaction[]
 
-  @@index([userId, status])
+  @@index([userId, type, status])
   @@map("installment_plans")
 }
 
@@ -274,7 +279,7 @@ model Transaction {
   userId              String    @map("user_id") @db.Uuid
   /// income · expense
   type                String
-  /// fixed · variable · planned · installment · extra
+  /// fixed · variable · planned · installment · extra · carryover (saldo do mês anterior)
   nature              String
   /// forecast · settled
   status              String
@@ -326,16 +331,18 @@ model Transaction {
 
 /// Ajustes de um mês: meta de investimento do mês (RF-50) e observações.
 model MonthSettings {
-  userId            String    @map("user_id") @db.Uuid
-  competenceMonth   DateTime  @map("competence_month") @db.Date
+  userId               String    @map("user_id") @db.Uuid
+  competenceMonth      DateTime  @map("competence_month") @db.Date
   /// null = usa a meta padrão do usuário.
-  savingsGoalCents  BigInt?   @map("savings_goal_cents")
+  savingsGoalCents     BigInt?   @map("savings_goal_cents")
   /// Quanto da meta já foi investido no mês (a meta funciona como uma conta). null = nada.
-  goalInvestedCents BigInt?   @map("goal_invested_cents")
-  notes             String?
-  closedAt          DateTime? @map("closed_at") @db.Timestamptz(3)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  goalInvestedCents    BigInt?   @map("goal_invested_cents")
+  notes                String?
+  /// O usuário ignorou o saldo do mês anterior neste mês (RF-55): não oferece de novo.
+  carryoverDismissedAt DateTime? @map("carryover_dismissed_at") @db.Timestamptz(3)
+  closedAt             DateTime? @map("closed_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

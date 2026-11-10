@@ -1,5 +1,5 @@
-import { currentCompetenceMonth } from '@orla/core'
-import { formatBRL } from '@orla/core/money'
+import { currentCompetenceMonth, recurringIncomeForMonth, shareOfIncome } from '@orla/core'
+import { formatBRL, percentOfCents } from '@orla/core/money'
 import { savingsGoalSchema, type SavingsGoal } from '@orla/contracts'
 import { Check, CreditCard as CardIcon, Landmark, Plus } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -27,6 +27,13 @@ import { errorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
 const STEPS = ['Contas', 'Cartões', 'Salário', 'Meta'] as const
+
+/** "20%", "12,5%" — casas só quando precisa. */
+const sharePercent = new Intl.NumberFormat('pt-BR', {
+  style: 'percent',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+})
 
 function StepLayout({
   title,
@@ -57,18 +64,23 @@ function StepLayout({
 
 function AccountsStep({ onNext }: { onNext: () => void }) {
   const list = accounts.useList()
-  const { create } = accounts.useMutations()
+  const { create, remove } = accounts.useMutations()
   const toast = useToast()
   const [customOpen, setCustomOpen] = useState(false)
   const [pending, setPending] = useState<string | null>(null)
-  const existing = new Set(
-    (list.data ?? []).map((account) => account.name.toLocaleLowerCase('pt-BR')),
+  // Nome (minúsculo) → id da conta: o chip selecionado sabe qual conta remover.
+  const existing = new Map(
+    (list.data ?? []).map((account) => [account.name.toLocaleLowerCase('pt-BR'), account.id]),
   )
+  const mutationOptions = {
+    onError: (error: unknown) => toast({ message: errorMessage(error), tone: 'error' }),
+    onSettled: () => setPending(null),
+  }
 
   return (
     <StepLayout
       title="Onde está seu dinheiro?"
-      description="Toque nos bancos, corretoras e carteiras que você usa. Dá para mudar tudo depois."
+      description="Toque nos bancos, corretoras e carteiras que você usa (toque de novo para tirar). Dá para mudar tudo depois."
       footer={
         <Button block onClick={onNext}>
           {(list.data?.length ?? 0) > 0 ? 'Continuar' : 'Pular por enquanto'}
@@ -77,22 +89,22 @@ function AccountsStep({ onNext }: { onNext: () => void }) {
     >
       <div className="flex flex-wrap gap-2" role="group" aria-label="Sugestões de contas">
         {institutionPresets.map((preset) => {
-          const added = existing.has(preset.name.toLocaleLowerCase('pt-BR'))
+          const addedId = existing.get(preset.name.toLocaleLowerCase('pt-BR'))
+          const added = addedId !== undefined
           return (
             <button
               key={preset.name}
               type="button"
               aria-pressed={added}
-              disabled={added || pending === preset.name}
+              // Um toque por vez: evita criar/remover em paralelo e sair de sincronia.
+              disabled={pending !== null}
               onClick={() => {
                 setPending(preset.name)
-                create.mutate(preset, {
-                  onError: (error) => toast({ message: errorMessage(error), tone: 'error' }),
-                  onSettled: () => setPending(null),
-                })
+                if (addedId) remove.mutate(addedId, mutationOptions)
+                else create.mutate(preset, mutationOptions)
               }}
               className={cn(
-                'inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-subhead font-medium transition-colors',
+                'inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-subhead font-medium transition-[background-color,color,transform] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
                 added
                   ? 'bg-accent text-white'
                   : 'bg-surface text-text shadow-card hover:bg-surface-2',
@@ -356,6 +368,31 @@ function GoalStep({
   const [amount, setAmount] = useState<number | null>(null)
   const [percent, setPercent] = useState('20')
   const [error, setError] = useState<string | null>(null)
+  const templates = useRecurringTemplates()
+  // Renda de referência: salários (e outras receitas recorrentes) do passo anterior.
+  const incomeCents = recurringIncomeForMonth(templates.data ?? [], currentCompetenceMonth())
+
+  const fixedHint = (() => {
+    if (!amount || amount <= 0) return undefined
+    const share = shareOfIncome(amount, incomeCents)
+    if (share === null) return undefined
+    return `Esse valor corresponde a ${sharePercent.format(share)} da sua renda (${formatBRL(incomeCents)}).`
+  })()
+
+  const percentHint = (() => {
+    if (incomeCents <= 0) {
+      return templates.isSuccess
+        ? 'Cadastre o salário no passo anterior para ver quanto isso dá em reais.'
+        : undefined
+    }
+    const parsed = savingsGoalSchema.safeParse({
+      mode: 'percent',
+      percent: percent.trim().replace(',', '.'),
+    })
+    if (!parsed.success || parsed.data.mode !== 'percent') return undefined
+    const goalCents = percentOfCents(incomeCents, parsed.data.percent)
+    return `Esse percentual corresponde a ${formatBRL(goalCents)} por mês da sua renda (${formatBRL(incomeCents)}).`
+  })()
 
   const submit = () => {
     const candidate: SavingsGoal =
@@ -395,13 +432,20 @@ function GoalStep({
       />
       <SlideSwap index={mode === 'fixed' ? 0 : 1}>
         {mode === 'fixed' ? (
-          <MoneyInput label="Meta mensal" value={amount} onChange={setAmount} large />
+          <MoneyInput
+            label="Meta mensal"
+            value={amount}
+            onChange={setAmount}
+            large
+            hint={fixedHint && <span aria-live="polite">{fixedHint}</span>}
+          />
         ) : (
           <TextField
             label="Percentual das receitas do mês"
             inputMode="decimal"
             value={percent}
             onChange={(event) => setPercent(event.target.value)}
+            hint={percentHint && <span aria-live="polite">{percentHint}</span>}
             trailing={<span className="pr-3 text-body text-text-2">%</span>}
           />
         )}

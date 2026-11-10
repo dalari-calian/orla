@@ -54,7 +54,8 @@ Tela única centralizada, logo, campos username e senha, "Criar conta" (pede có
 - Resumo fixo compacto: Entradas · Saídas · Sobra.
 - Filtros (chips): Todos · Receitas · Despesas · Investimento (a meta do mês, fora de Despesas) · Previstos · Cartão X · Categoria.
 - Lista agrupada por dia (ou por categoria — alternável), cada linha: ícone da categoria, descrição, estabelecimento · forma de pagamento · "3/12" se parcela, valor; status previsto em texto secundário com bolinha vazia; toque → editar; swipe → pagar/excluir.
-- Seções colapsáveis: **Receitas**, **Fixas**, **Parcelas do mês**, **Planejamentos**, **Variáveis**.
+- Seções colapsáveis: **Saldo anterior**, **Receitas**, **Fixas**, **Parcelas do mês**, **Planejamentos**, **Variáveis**.
+- Saldo do mês anterior (RF-54..56): abaixo do resumo, cartão "Novembro fechou com R$ 50 sobrando. Levar para dezembro?" [Levar] [Ignorar] (ou "faltaram R$ 30… Descontar de dezembro?"), com aviso quando o mês anterior ainda não terminou ou tem lançamentos previstos. Se o mês anterior mudar depois, "O saldo de novembro mudou" [Atualizar] [Agora não]. O resumo mostra a linha "Saldo de novembro"; tocar no lançamento abre o detalhe (atualizar / não levar). Em Configurações: "Saldo do mês anterior" — Perguntar · Automático · Nunca.
 - Desktop: tabela com colunas Data · Descrição · Categoria · Forma · Conta/Cartão · Estabelecimento · Natureza · Status · Valor, ordenável, edição inline e em lote.
 
 ### Finanças — Dashboard
@@ -65,7 +66,8 @@ Os 10 blocos do doc 04 §8. Mobile em coluna, desktop em grade. Seletor de perí
 
 - Topo: **"Para quitar tudo: R$ 1.300,00"** + "Compromisso mensal: R$ 250/mês" + gráfico de barras dos próximos 12 meses ("livre em ago/2027").
 - Cards: nome, estabelecimento, cartão, barra de progresso, "2/12", "Pago R$ 333 de R$ 2.000", "Falta R$ 1.667", "Termina em out/2027". Filtro ativos/finalizados.
-- Detalhe: tabela das parcelas (competência, valor, status), ações Editar · Quitar antecipado · Cancelar.
+- Detalhe: tabela das parcelas (competência, valor, status), ações Editar · Dividir com alguém · Quitar antecipado · Cancelar.
+- Abas **A pagar / A receber** no topo (`?tipo=receber`). "A receber" (RF-49): "Falta receber: R$ 150" em verde, "Entra este mês: R$ 50 · tudo recebido em mar/2027", barras verdes; cards "De Ana", "Recebido R$ 50 de R$ 200"; detalhe com "Recebi tudo antes". No sheet "+" › Parcelado, o primeiro controle escolhe **A pagar / A receber** (a receber esconde cartão e pergunta "Quem vai te pagar" e "Data do 1º recebimento"). As parcelas aparecem em Receitas no mês ("1/4 +R$ 50"), com o ✓ de "Recebi".
 
 ### Fatura do cartão
 
@@ -132,3 +134,6 @@ Lista de modelos (Salário R$ 6.000 todo dia 5; Aluguel; Netflix; Aniversário R
 ## Onboarding (primeiro acesso)
 
 Passos curtos e puláveis: 1) contas/bancos que usa, 2) cartões (fechamento/vencimento), 3) salário base, 4) meta de investimento, 5) classes e % alvo, 6) "Importar minhas planilhas?" → wizard.
+
+- Passo 1: os bancos sugeridos são um toggle — tocar de novo remove a conta (soft delete).
+- Passo 4: abaixo do campo, a meta aparece na outra forma, calculada sobre as receitas recorrentes do mês (passo 3): valor fixo → "corresponde a 20% da sua renda"; % → "corresponde a R$ 1.200,00 por mês". Sem salário cadastrado, o modo % convida a cadastrá-lo.

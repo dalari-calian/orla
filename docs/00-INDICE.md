@@ -19,6 +19,7 @@ Projeto: **Orla** — gestão financeira pessoal e de investimentos, substituind
 | 13  | `13-roadmap.md`                   | Fases de implementação com critérios de aceite                                      | Planejar o próximo passo                    |
 | 14  | `14-ambiente-local.md`            | Pré-requisitos da máquina, portas, .env, script de verificação                      | Antes da Fase 0 e quando o ambiente quebrar |
 | 15  | `15-bugs-e-melhorias.md`          | Relatos de bug/melhoria no app, status e a fila de agentes                          | Ao triar relatos ou rodar a fila            |
+| 16  | `16-deploy-e-backup.md`           | Pipeline de deploy, backups 00h/12h/pre-deploy, como ligar e restaurar              | Deploy, backup ou restauração               |
 
 ## Como usar com o Claude Code
 

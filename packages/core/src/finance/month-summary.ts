@@ -1,15 +1,27 @@
 /**
  * Resumo do mês e meta de investimento (docs/04 §6, RF-17, RF-22, RF-50, RF-51).
  */
-import { percentOfCents, sumCents, type Cents } from '../money/cents.ts'
+import { assertCents, percentOfCents, sumCents, type Cents } from '../money/cents.ts'
+import { Decimal } from '../money/decimal.ts'
+import { templateOccursIn, type RecurrenceRule } from './recurrence.ts'
 
 export type TransactionType = 'income' | 'expense'
-export type TransactionNature = 'fixed' | 'variable' | 'planned' | 'installment' | 'extra'
+export type TransactionNature =
+  | 'fixed'
+  | 'variable'
+  | 'planned'
+  | 'installment'
+  | 'extra'
+  /** Saldo do mês anterior (RF-54): só a API cria; nunca é lançado à mão. */
+  | 'carryover'
 export type TransactionStatus = 'forecast' | 'settled'
 
-/** Naturezas válidas para cada tipo (receita: fixa ou extra; despesa: as outras). */
+/**
+ * Naturezas válidas para cada tipo (receita: fixa, extra ou parcela de um parcelado a
+ * receber; despesa: as outras). Parcela nunca é lançada à mão — nasce do parcelamento.
+ */
 export const NATURES_BY_TYPE: Record<TransactionType, readonly TransactionNature[]> = {
-  income: ['fixed', 'extra'],
+  income: ['fixed', 'extra', 'installment'],
   expense: ['fixed', 'variable', 'planned', 'installment'],
 }
 
@@ -47,6 +59,35 @@ export function resolveSavingsGoal(
   if (defaultGoal.mode === 'percent')
     return percentOfCents(incomeForecastCents, defaultGoal.percent)
   return 0
+}
+
+/**
+ * Renda prevista do mês pelos modelos recorrentes de receita (salário base etc.).
+ * Usada para mostrar a meta nas duas formas antes de existir lançamento no mês.
+ */
+export function recurringIncomeForMonth(
+  templates: readonly (RecurrenceRule & { type: TransactionType; amountCents: Cents })[],
+  month: string,
+): Cents {
+  return sumCents(
+    templates
+      .filter((template) => template.type === 'income' && templateOccursIn(template, month))
+      .map((template) => template.amountCents),
+  )
+}
+
+/**
+ * Fração da renda que um valor representa (0.2 = 20%), arredondada a 4 casas
+ * (0,01 ponto percentual). `null` sem renda — não há o que comparar.
+ */
+export function shareOfIncome(amountCents: Cents, incomeCents: Cents): number | null {
+  assertCents(amountCents)
+  assertCents(incomeCents)
+  if (incomeCents <= 0) return null
+  return new Decimal(amountCents)
+    .dividedBy(incomeCents)
+    .toDecimalPlaces(4, Decimal.ROUND_HALF_EVEN)
+    .toNumber()
 }
 
 export interface SummaryTransaction {
@@ -98,9 +139,14 @@ export interface MonthSummary {
   goalInvestedCents: Cents
   /** Quanto falta investir para cumprir a meta (0 = cumprida). */
   goalRemainingCents: Cents
-  /** entradas previstas − saídas previstas − max(meta, investido) */
+  /** entradas previstas − saídas previstas − max(meta, investido) + saldo anterior */
   projectedSurplusCents: Cents
-  /** entradas recebidas − saídas pagas − investido (a meta funciona como uma conta do mês) */
+  /**
+   * Saldo trazido do mês anterior, com sinal (RF-54). Fica fora de entradas/saídas e da
+   * base da meta em %; soma na sobra e no saldo.
+   */
+  carryoverCents: Cents
+  /** entradas recebidas − saídas pagas − investido + saldo anterior (a meta é uma conta do mês) */
   currentBalanceCents: Cents
   /** Quanto ainda dá para gastar sem furar a meta (sobra prevista, se positiva). */
   freeToSpendCents: Cents
@@ -123,8 +169,14 @@ export function computeMonthSummary(
     investedCents?: Cents | null
   },
 ): MonthSummary {
-  const income = transactions.filter((item) => item.type === 'income')
-  const expenses = transactions.filter((item) => item.type === 'expense')
+  const carryoverCents = sumCents(
+    transactions
+      .filter((item) => item.nature === 'carryover')
+      .map((item) => (item.type === 'income' ? item.amountCents : -item.amountCents)),
+  )
+  const regular = transactions.filter((item) => item.nature !== 'carryover')
+  const income = regular.filter((item) => item.type === 'income')
+  const expenses = regular.filter((item) => item.type === 'expense')
 
   const incomeForecastCents = sumCents(income.map((item) => item.amountCents))
   const incomeSettledCents = sumCents(
@@ -152,7 +204,8 @@ export function computeMonthSummary(
   )
   const goalInvestedCents = goal.investedCents ?? 0
   const reservedForGoal = Math.max(savingsGoalCents, goalInvestedCents)
-  const projectedSurplusCents = incomeForecastCents - expenseForecastCents - reservedForGoal
+  const projectedSurplusCents =
+    incomeForecastCents - expenseForecastCents - reservedForGoal + carryoverCents
   return {
     incomeForecastCents,
     incomeSettledCents,
@@ -161,8 +214,10 @@ export function computeMonthSummary(
     savingsGoalCents,
     goalInvestedCents,
     goalRemainingCents: Math.max(savingsGoalCents - goalInvestedCents, 0),
+    carryoverCents,
     projectedSurplusCents,
-    currentBalanceCents: incomeSettledCents - expenseSettledCents - goalInvestedCents,
+    currentBalanceCents:
+      incomeSettledCents - expenseSettledCents - goalInvestedCents + carryoverCents,
     freeToSpendCents: Math.max(projectedSurplusCents, 0),
     goalShortfallCents: Math.max(-projectedSurplusCents, 0),
   }

@@ -306,6 +306,7 @@ describe('projeção (RF-52)', () => {
       plannedCents: 20_000,
       variableCents: 5_000,
       goalCents: 120_000,
+      carryoverCents: 0,
       surplusCents: 288_334,
     })
     const negative = { ...row, month: '2027-02', surplusCents: -1 }

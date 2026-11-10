@@ -2,7 +2,8 @@
 // .env (se faltar) → dependências → Prisma Client → Postgres → migrations → seed → web + API.
 // Pode rodar todo dia: cada passo é idempotente e rápido quando não há nada novo.
 import { execSync } from 'node:child_process'
-import { copyFileSync, existsSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,9 +19,27 @@ function run(label, command) {
   }
 }
 
-if (!existsSync(join(root, '.env'))) {
-  copyFileSync(join(root, '.env.example'), join(root, '.env'))
+const envPath = join(root, '.env')
+if (!existsSync(envPath)) {
+  copyFileSync(join(root, '.env.example'), envPath)
   console.info('▶ .env criado a partir do .env.example')
+}
+
+// Segredos ainda com o texto de exemplo ("troque-por-...") viram valores aleatórios.
+// Só mexe em quem está no placeholder: segredo que você definiu fica intocado.
+const PLACEHOLDER_SECRETS = ['JWT_SECRET', 'REFRESH_TOKEN_PEPPER']
+let envText = readFileSync(envPath, 'utf8')
+const replaced = []
+for (const key of PLACEHOLDER_SECRETS) {
+  const line = new RegExp(`^${key}=troque-por-.*$`, 'm')
+  if (line.test(envText)) {
+    envText = envText.replace(line, `${key}=${randomBytes(32).toString('hex')}`)
+    replaced.push(key)
+  }
+}
+if (replaced.length > 0) {
+  writeFileSync(envPath, envText)
+  console.info(`▶ Segredos gerados no .env: ${replaced.join(', ')}`)
 }
 
 try {

@@ -17,9 +17,45 @@ import { SlideSwap } from '@/components/ui/SlideSwap'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { categories, creditCards, payees } from '@/features/registrations/api'
 import { errorMessage } from '@/lib/api'
+import type { PlanType } from './api'
 import { apiFieldErrors, categoryOptions, zodFieldErrors, type FieldErrors } from './form-utils'
 
 type AmountMode = 'total' | 'installment'
+
+/** Valores sugeridos para um novo parcelamento (ex.: "Dividir com alguém"). */
+export interface InstallmentPlanDefaults {
+  description?: string
+  totalCents?: number
+  installmentsCount?: number
+  /** Data da compra / do 1º recebimento. */
+  purchaseDate?: string
+  /** 1ª competência fixa (mantida enquanto a data sugerida não mudar). */
+  firstCompetenceMonth?: string
+}
+
+/** Textos que mudam entre parcelado a pagar e a receber (RF-49). */
+const copy = {
+  expense: {
+    descriptionPlaceholder: 'Ex.: Nintendo Switch',
+    payeeLabel: 'Estabelecimento (opcional)',
+    payeePlaceholder: 'Ex.: Amazon',
+    dateLabel: 'Data da compra',
+    currentHint:
+      'Compra antiga? Informe em qual parcela você está neste mês: as anteriores entram como pagas.',
+    editHint: 'Mudar o total ou o nº de parcelas recalcula só as parcelas ainda não pagas.',
+    submit: 'Criar parcelamento',
+  },
+  income: {
+    descriptionPlaceholder: 'Ex.: Ana — metade do presente',
+    payeeLabel: 'Quem vai te pagar (opcional)',
+    payeePlaceholder: 'Ex.: Ana',
+    dateLabel: 'Data do 1º recebimento',
+    currentHint:
+      'Já começou? Informe em qual parcela está neste mês: as anteriores entram como recebidas.',
+    editHint: 'Mudar o total ou o nº de parcelas recalcula só as parcelas ainda não recebidas.',
+    submit: 'Criar parcelado a receber',
+  },
+} as const
 
 /** Prévia "3× de R$ 33,34 (1ª) e R$ 33,33". */
 function preview(totalCents: number | null, count: number): string | null {
@@ -37,10 +73,13 @@ function preview(totalCents: number | null, count: number): string | null {
 
 /**
  * Cadastro/edição de parcelamento (RF-40): total **ou** valor da parcela, nº de parcelas,
- * cartão e "já estou na parcela k" para compras antigas.
+ * cartão e "já estou na parcela k" para compras antigas. Também o parcelado a receber
+ * (RF-49): sem cartão, com categoria de receita e "quem vai te pagar".
  */
 export function InstallmentPlanForm({
   initial,
+  defaultType = 'expense',
+  defaults,
   submitting,
   error,
   onCreate,
@@ -48,6 +87,9 @@ export function InstallmentPlanForm({
   extra,
 }: {
   initial?: InstallmentPlan | undefined
+  /** Tipo inicial de um novo parcelamento; na edição vale o do parcelamento. */
+  defaultType?: PlanType | undefined
+  defaults?: InstallmentPlanDefaults | undefined
   submitting: boolean
   error: unknown
   onCreate?: (values: CreateInstallmentPlanRequest) => Promise<unknown>
@@ -55,28 +97,44 @@ export function InstallmentPlanForm({
   extra?: ReactNode
 }) {
   const editing = Boolean(initial)
+  const [planType, setPlanType] = useState<PlanType>(initial?.type ?? defaultType)
+  const receivable = planType === 'income'
+  const text = copy[planType]
   const categoryList = categories.useList()
   const cardList = creditCards.useList()
   const payeeList = payees.useList()
   const payeeMutations = payees.useMutations()
 
-  const [description, setDescription] = useState(initial?.description ?? '')
+  const [description, setDescription] = useState(
+    initial?.description ?? defaults?.description ?? '',
+  )
   const [mode, setMode] = useState<AmountMode>('total')
-  const [amountCents, setAmountCents] = useState<number | null>(initial?.totalCents ?? null)
-  const [count, setCount] = useState(String(initial?.installmentsCount ?? ''))
+  const [amountCents, setAmountCents] = useState<number | null>(
+    initial?.totalCents ?? defaults?.totalCents ?? null,
+  )
+  const [count, setCount] = useState(
+    String(initial?.installmentsCount ?? defaults?.installmentsCount ?? ''),
+  )
   const [onCredit, setOnCredit] = useState(initial ? initial.paymentMethod === 'credit' : true)
   const [creditCardId, setCreditCardId] = useState(initial?.creditCardId ?? '')
   const [categoryId, setCategoryId] = useState<string | null>(initial?.categoryId ?? null)
   const [payeeName, setPayeeName] = useState<string | null>(null)
-  const [purchaseDate, setPurchaseDate] = useState<string>(initial?.purchaseDate ?? todayIsoDate())
+  const [purchaseDate, setPurchaseDate] = useState<string>(
+    initial?.purchaseDate ?? defaults?.purchaseDate ?? todayIsoDate(),
+  )
   const [currentInstallment, setCurrentInstallment] = useState('')
   const [errors, setErrors] = useState<FieldErrors>({})
 
   const cards = cardList.data ?? []
   const options = useMemo(
-    () => categoryOptions(categoryList.data ?? [], 'expense'),
-    [categoryList.data],
+    () => categoryOptions(categoryList.data ?? [], planType),
+    [categoryList.data, planType],
   )
+  // A 1ª competência sugerida só vale enquanto a data sugerida não for trocada.
+  const fixedFirstMonth =
+    defaults?.firstCompetenceMonth && purchaseDate === defaults.purchaseDate
+      ? defaults.firstCompetenceMonth
+      : undefined
   const payeeText =
     payeeName ?? payeeList.data?.find((payee) => payee.id === initial?.payeeId)?.name ?? ''
   const countNumber = Number(count)
@@ -106,16 +164,22 @@ export function InstallmentPlanForm({
           payeeId: await resolvePayeeId(),
           totalCents: amountCents,
           installmentsCount: countNumber,
-          ...(onCredit && creditCardId && { creditCardId }),
+          ...(!receivable && onCredit && creditCardId && { creditCardId }),
         })
         return
       }
       const draft: CreateInstallmentPlanRequest = {
+        type: planType,
         description: description.trim(),
         categoryId,
-        paymentMethod: onCredit ? 'credit' : 'boleto',
-        creditCardId: onCredit ? creditCardId || null : null,
+        ...(receivable
+          ? { paymentMethod: 'other', creditCardId: null }
+          : {
+              paymentMethod: onCredit ? 'credit' : 'boleto',
+              creditCardId: onCredit ? creditCardId || null : null,
+            }),
         purchaseDate,
+        ...(fixedFirstMonth && !currentInstallment && { firstCompetenceMonth: fixedFirstMonth }),
         installmentsCount: countNumber,
         ...(mode === 'total'
           ? { totalCents: amountCents ?? 0 }
@@ -140,6 +204,22 @@ export function InstallmentPlanForm({
         void submit()
       }}
     >
+      {!editing && (
+        <SegmentedControl
+          label="Direção do parcelado"
+          value={planType}
+          onChange={(next) => {
+            setPlanType(next)
+            // Categoria de despesa não serve para receita (e vice-versa).
+            setCategoryId(null)
+            setErrors({})
+          }}
+          options={[
+            { value: 'expense', label: 'A pagar' },
+            { value: 'income', label: 'A receber' },
+          ]}
+        />
+      )}
       {!editing && (
         <SegmentedControl
           label="Informar"
@@ -173,14 +253,14 @@ export function InstallmentPlanForm({
       />
       <TextField
         label="Descrição"
-        placeholder="Ex.: Nintendo Switch"
+        placeholder={text.descriptionPlaceholder}
         value={description}
         onChange={(event) => setDescription(event.target.value)}
         error={errors.description}
         autoComplete="off"
       />
 
-      {!editing && (
+      {!editing && !receivable && (
         <SegmentedControl
           label="Onde parcelou"
           value={onCredit ? 'credit' : 'boleto'}
@@ -191,8 +271,9 @@ export function InstallmentPlanForm({
           ]}
         />
       )}
-      <SlideSwap index={onCredit ? 0 : 1}>
+      <SlideSwap index={onCredit && !receivable ? 0 : 1}>
         {onCredit &&
+          !receivable &&
           (cards.length > 0 ? (
             <SelectField
               label="Cartão"
@@ -228,8 +309,8 @@ export function InstallmentPlanForm({
         }))}
       />
       <TextField
-        label="Estabelecimento (opcional)"
-        placeholder="Ex.: Amazon"
+        label={text.payeeLabel}
+        placeholder={text.payeePlaceholder}
         list="installment-payees"
         value={payeeText}
         onChange={(event) => setPayeeName(event.target.value)}
@@ -244,7 +325,7 @@ export function InstallmentPlanForm({
       {!editing && (
         <div className="grid grid-cols-2 gap-3">
           <TextField
-            label="Data da compra"
+            label={text.dateLabel}
             type="date"
             value={purchaseDate}
             onChange={(event) => setPurchaseDate(event.target.value)}
@@ -262,17 +343,8 @@ export function InstallmentPlanForm({
           />
         </div>
       )}
-      {!editing && (
-        <p className="px-1 text-footnote text-text-2">
-          Compra antiga? Informe em qual parcela você está neste mês: as anteriores entram como
-          pagas.
-        </p>
-      )}
-      {editing && (
-        <p className="px-1 text-footnote text-text-2">
-          Mudar o total ou o nº de parcelas recalcula só as parcelas ainda não pagas.
-        </p>
-      )}
+      {!editing && <p className="px-1 text-footnote text-text-2">{text.currentHint}</p>}
+      {editing && <p className="px-1 text-footnote text-text-2">{text.editHint}</p>}
 
       {error !== null && error !== undefined && !apiFieldErrors(error) && (
         <p role="alert" className="text-footnote text-negative">
@@ -280,7 +352,7 @@ export function InstallmentPlanForm({
         </p>
       )}
       <Button type="submit" block loading={submitting || payeeMutations.create.isPending}>
-        {editing ? 'Salvar' : 'Criar parcelamento'}
+        {editing ? 'Salvar' : text.submit}
       </Button>
       {extra && <div className="flex flex-wrap justify-center gap-2">{extra}</div>}
     </form>

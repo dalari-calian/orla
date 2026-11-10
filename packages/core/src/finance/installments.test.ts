@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildInstallmentSchedule,
   computePayoff,
+  InstallmentError,
   firstMonthFromCurrentInstallment,
   installmentIndicators,
   installmentTotal,
@@ -9,6 +10,7 @@ import {
   payoffTotal,
   planInstallmentEdit,
   splitInstallments,
+  splitShareCents,
   type ExistingInstallment,
 } from './installments.ts'
 
@@ -269,5 +271,46 @@ describe('RF-47 — editar parcelamento', () => {
         existing: paid,
       }),
     ).toThrow('não cobre')
+  })
+})
+
+describe('RF-49 — parcelado a receber', () => {
+  it('dividir com alguém: metade do total, centavo que sobra fica com quem comprou', () => {
+    expect(splitShareCents(40000)).toBe(20000)
+    expect(splitShareCents(10001)).toBe(5000)
+    expect(splitShareCents(30000, 3)).toBe(10000)
+    expect(splitShareCents(2)).toBe(1)
+  })
+
+  it('dividir: erros', () => {
+    expect(() => splitShareCents(0)).toThrow(InstallmentError)
+    expect(() => splitShareCents(1)).toThrow('pequeno demais')
+    expect(() => splitShareCents(1000, 1)).toThrow('pelo menos 2')
+    expect(() => splitShareCents(1000, 2.5)).toThrow(InstallmentError)
+    expect(() => splitShareCents(10.5)).toThrow()
+  })
+
+  it('o exemplo da namorada: R$ 200 em 4× de R$ 50, indicadores de quanto falta receber', () => {
+    const schedule = buildInstallmentSchedule({
+      totalCents: splitShareCents(40000),
+      count: 4,
+      firstCompetenceMonth: '2026-11',
+    })
+    expect(schedule.map((item) => [item.number, item.competenceMonth, item.amountCents])).toEqual([
+      [1, '2026-11', 5000],
+      [2, '2026-12', 5000],
+      [3, '2027-01', 5000],
+      [4, '2027-02', 5000],
+    ])
+    const received = schedule.map((item) =>
+      item.number === 1 ? { ...item, status: 'settled' as const } : item,
+    )
+    expect(
+      installmentIndicators(
+        { totalCents: 20000, count: 4, firstCompetenceMonth: '2026-11', status: 'active' },
+        received,
+        '2026-12',
+      ),
+    ).toMatchObject({ currentNumber: 2, paidCents: 5000, remainingCents: 15000, remainingCount: 3 })
   })
 })

@@ -69,6 +69,8 @@ Implementado na Fase 1 (schemas em `packages/contracts/src/registrations.ts` e `
 | ------ | ----------------------------------------- | ----------------------------------------------------------------------------- |
 | GET    | `/months/:month`                          | materializa templates (RF-11) e retorna `{ summary, transactions, settings }` |
 | PATCH  | `/months/:month/settings`                 | meta do mês e quanto já foi investido                                         |
+| POST   | `/months/:month/carryover`                | leva (ou atualiza) o saldo do mês anterior para este mês (RF-56)              |
+| DELETE | `/months/:month/carryover`                | "Ignorar" o saldo do mês anterior neste mês (RF-55)                           |
 | GET    | `/months/:month/dashboard`                | agregados do doc 04 §8                                                        |
 | GET    | `/projection?from=&months=12`             | RF-52                                                                         |
 | CRUD   | `/transactions`                           | filtros: `month, type, nature, status, categoryId, cardId, accountId, q`      |
@@ -85,6 +87,8 @@ Implementado na Fase 2 (schemas em `packages/contracts/src/finances.ts`; regras 
 
 - **Mês**
   - `GET /months/:month` materializa os modelos ativos (RF-11, idempotente) e devolve `{ month, summary, settings: { savingsGoalCents, goalInvestedCents, defaultSavingsGoal, notes }, transactions }`. `summary` segue a RF-51.
+  - `GET /months/:month` também devolve `carryover: { state: none|offer|applied|stale, previousMonth, previousBalanceCents, appliedCents, previousMonthOpen, previousPendingCount }` (RF-55) e `summary.carryoverCents`. No modo `auto`, abrir o mês já cria/sincroniza o lançamento.
+  - `POST /months/:month/carryover` → 204: cria, atualiza ou (saldo zero) remove o lançamento `nature=carryover` com o saldo atual do mês anterior. `DELETE /months/:month/carryover` → 204: remove o lançamento e marca o mês como ignorado. O lançamento não aceita `PATCH` nem `restore` (409); `DELETE /transactions/:id` nele = ignorar.
   - `PATCH /months/:month/settings { savingsGoalCents?: number | null, goalInvestedCents?: number | null, notes? }` define a meta do mês (`null` volta à meta padrão) e quanto dela já foi investido (`null` = nada; sai do saldo do mês).
   - Mês malformado → `404`. Dashboard e projeção: ver Fase 3 abaixo.
 - **Lançamentos**
@@ -96,7 +100,7 @@ Implementado na Fase 2 (schemas em `packages/contracts/src/finances.ts`; regras 
   - `parentPlannedId` (RF-22): precisa ser um planejamento de despesa do usuário; o gasto vai para a competência do planejamento. Excluir o planejamento desvincula os gastos. Planejamento com gastos não muda de natureza (`409`).
   - Parcela não pode ser excluída sozinha (`409`): use editar, quitar ou cancelar o parcelamento.
 - **Parcelamentos**
-  - Rotas: `GET /installment-plans?status=active|finished|all` (traz `indicators`, RF-44, no mês atual) · `GET /installment-plans/summary` → `{ payoffTotalCents, activeCount, byCard, monthly[12], freeFromMonth }` (RF-45) · `GET /installment-plans/:id` → `{ plan, installments }` · `POST` · `PATCH` · `DELETE` · `/restore` · `POST /:id/payoff { amountCents, date, competenceMonth? }` (RF-46) · `POST /:id/cancel` (RF-48).
+  - Rotas: `GET /installment-plans?status=active|finished|all&type=expense|income` (traz `indicators`, RF-44, no mês atual; `type` padrão `expense`) · `GET /installment-plans/summary?type=expense|income` → `{ payoffTotalCents, activeCount, byCard, monthly[12], freeFromMonth }` (RF-45; em `income` = falta receber e quanto entra por mês, RF-49) · `POST` aceita `type: 'income'` (parcelado a receber: sem cartão, categoria de receita, `purchaseDate` = 1º recebimento) · `GET /installment-plans/:id` → `{ plan, installments }` · `POST` · `PATCH` · `DELETE` · `/restore` · `POST /:id/payoff { amountCents, date, competenceMonth? }` (RF-46) · `POST /:id/cancel` (RF-48).
   - Criar (RF-40..43): `{ description, paymentMethod (padrão credit), creditCardId?, accountId?, payeeId?, categoryId?, purchaseDate, totalCents | installmentCents, installmentsCount (1–480), firstCompetenceMonth?, currentInstallment?, notes? }`.
   - 1ª competência: a informada; senão "mês atual − (k − 1)" com "já estou na parcela k"; senão a fatura da compra.
   - Data de cada parcela: o vencimento da fatura, no crédito; senão o dia da compra em cada mês.
@@ -179,6 +183,8 @@ Implementado na Fase 3 (schemas em `packages/contracts/src/dashboard.ts`; regras
 - `POST /balances/:id/close`: congela os aportes e proventos do período. Se for o balanço mais recente, o saldo de cada renda fixa (e o preço dos ativos de preço manual) vira o valor atual do ativo. `POST /:id/reopen`: volta a rascunho e descongela; os meses seguintes são recalculados.
 - `GET /observed-prices` (RB-30): por ativo, máximo, mínimo, último preço, DY e P/VP vistos nos balanços, histórico, preço de hoje, PM e distância da mínima e da máxima.
 - `/me/settings` ganhou `contributionTiming` (`end` · `start` · `dietz`) e `returnContributionSource` (`contributions` · `trades`).
+- `/me/settings` ganhou `carryoverMode` (`ask` · `auto` · `off`) — saldo do mês anterior (RF-55).
+- `GET /projection`: cada linha tem `carryoverCents` (saldo anterior, com sinal); `surplusCents` já o inclui.
 
 ### Importação / exportação (Fase 4)
 

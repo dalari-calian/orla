@@ -107,16 +107,17 @@ Modelos que **projetam** lançamentos nos meses: salário base, aluguel, assinat
 
 ### `installment_plans`
 
-Uma compra parcelada (ex.: Nintendo Switch 12×).
+Uma compra parcelada (ex.: Nintendo Switch 12×) ou um valor a receber em parcelas (RF-49).
 
 | campo                  | tipo         | notas                                                                    |
 | ---------------------- | ------------ | ------------------------------------------------------------------------ |
 | id, user_id            | uuid         |                                                                          |
+| type                   | text         | `expense` (a pagar, padrão) · `income` (a receber) — `type` das parcelas |
 | description            | text         | "Nintendo Switch"                                                        |
 | payee_id, category_id  | uuid         |                                                                          |
 | credit_card_id         | uuid null    | null se parcelado em boleto/carnê                                        |
-| payment_method         | text         | normalmente `credit`                                                     |
-| purchase_date          | date         |                                                                          |
+| payment_method         | text         | normalmente `credit`; `other` no parcelado a receber                     |
+| purchase_date          | date         | data da compra; no parcelado a receber, data do 1º recebimento           |
 | total_cents            | bigint       | valor total da compra                                                    |
 | installments_count     | smallint ≥ 1 | 12                                                                       |
 | first_competence_month | date         | competência da parcela 1 (calculada pelo fechamento do cartão, editável) |
@@ -132,7 +133,7 @@ Toda linha do mês. Receitas, despesas, parcelas, planejamentos — tudo aqui.
 | --------------------------------- | ------------- | -------------------------------------------------------------------------- |
 | id, user_id                       | uuid          |                                                                            |
 | type                              | text          | `income` · `expense`                                                       |
-| nature                            | text          | `fixed` · `variable` · `planned` · `installment` · `extra` (receita extra) |
+| nature                            | text          | `fixed` · `variable` · `planned` · `installment` · `extra` (receita extra) · `carryover` (saldo do mês anterior, RF-54; os dois tipos; no máximo um ativo por mês — índice parcial único). Receita aceita `fixed`, `extra`, `installment` (parcelado a receber) e `carryover` |
 | status                            | text          | `forecast` (previsto) · `settled` (realizado/pago)                         |
 | description                       | text          |                                                                            |
 | amount_cents                      | bigint > 0    | sempre positivo; o sinal vem de `type`                                     |
@@ -159,9 +160,10 @@ Toda linha do mês. Receitas, despesas, parcelas, planejamentos — tudo aqui.
 | user_id, competence_month | PK composta      |                                                            |
 | savings_goal_cents        | bigint null      | meta de investimento do mês (null = usa padrão do usuário) |
 | notes                     | text             |                                                            |
+| carryover_dismissed_at    | timestamptz null | "Ignorar" o saldo do mês anterior neste mês (RF-55)        |
 | closed_at                 | timestamptz null | mês "fechado" (só aviso, não bloqueia)                     |
 
-`user_settings`: `default_savings_goal_cents`, `default_savings_goal_pct` (alternativo), `card_competence` (`due_month` · `closing_month`), `contribution_timing` (`end` · `start` · `dietz`), `return_contribution_source` (`contributions` · `trades`), `currency='BRL'`, `theme`, `hide_values`.
+`user_settings`: `default_savings_goal_cents`, `default_savings_goal_pct` (alternativo), `card_competence` (`due_month` · `closing_month`), `contribution_timing` (`end` · `start` · `dietz`), `return_contribution_source` (`contributions` · `trades`), `carryover_mode` (`ask` · `auto` · `off`, RF-55), `currency='BRL'`, `theme`, `hide_values`.
 
 ## Tabelas — Investimentos
 

@@ -64,6 +64,11 @@ Tudo que calcula fica em `packages/core/src/finance`. Cada regra abaixo tem ID (
 - **RF-46** Quitar antecipadamente: informa valor pago (pode ter desconto) e data → cria uma transação `settled` com esse valor na competência escolhida, cancela (soft delete) as parcelas `forecast` restantes, `status=paid_off`. Registra o desconto obtido (falta pagar − valor pago).
 - **RF-47** Editar parcelamento (valor, nº parcelas) regera apenas parcelas `forecast` não-override; parcelas pagas nunca mudam.
 - **RF-48** Estorno/cancelamento: `status=canceled`, parcelas futuras removidas.
+- **RF-49** **Parcelado a receber**: o parcelamento tem `type` — `expense` (a pagar, o padrão de RF-40..48) ou `income` (a receber). Ex.: você parcelou um presente de R$ 400 em 4× e a namorada paga metade → "Ana — metade do presente", R$ 200 em 4× de R$ 50, entrando como receita prevista todo mês ("1/4 +R$ 50").
+  - Mesmas regras de divisão, geração, "já estou na parcela k", indicadores, edição, quitação (aqui "recebi tudo antes") e cancelamento (RF-41..48); as parcelas são `transactions` com `type=income`, `nature=installment` e entram nas **entradas** do mês.
+  - Sem cartão nem forma de pagamento (`payment_method=other`); `purchase_date` é a **data do 1º recebimento** (competência = mês dessa data; cada parcela no mesmo dia dos meses seguintes). Categoria, se houver, é de receita. "Quem vai te pagar" usa `payee`.
+  - Totalizador e compromisso mensal (RF-45) são calculados **separados por tipo**: "Para quitar tudo" só soma o que é a pagar; o "A receber" mostra **falta receber**, quanto entra por mês e quando tudo terá sido recebido.
+  - Atalho **"Dividir com alguém"** num parcelamento a pagar: abre um parcelado a receber já com a descrição, nº de parcelas e 1ª competência da compra e **metade do total** (`floor(total / 2)`; o centavo que sobra fica com quem comprou). Os dois parcelamentos são independentes.
 
 ## 6. Meta de investimento e sobra do mês
 
@@ -85,6 +90,21 @@ Tudo que calcula fica em `packages/core/src/finance`. Cada regra abaixo tem ID (
   - **A meta funciona como uma conta do mês**: reserva o valor inteiro na sobra desde o início (para não gastar o que é para investir) e aparece na lista do mês com o check de pago, na aba **Investimento** (e em Todos) — nunca em Despesas, porque investir não é gasto. Marcar o check registra a meta inteira como investida; tocar na linha permite informar um valor parcial ("investido R$ 1.000 de R$ 1.900 · faltam R$ 900"). Investir menos que a meta não libera a diferença para gastar; investir mais reserva o que foi investido.
 - **RF-52** Projeção dos próximos 12 meses: para cada mês, entradas previstas (templates), saídas previstas (fixas + parcelas + planejamentos), meta, sobra. Mostra o mês em que a sobra fica negativa.
 - **RF-53** O valor efetivamente investido no mês aparece no resumo como "Investido: R$ X de R$ meta". Hoje é informado à mão (`month_settings.goal_invested_cents`); na Fase 6 passa a vir também dos aportes (`contributions`).
+
+### Saldo do mês anterior (core: `finance/carryover`)
+
+- **RF-54** O que sobrou (ou faltou) em um mês pode entrar no seguinte como um lançamento de natureza **`carryover`** ("Saldo de novembro" como entrada; "Faltou em novembro" como saída). O valor é o **saldo atual** do mês anterior (`entradasRecebidas − saidasPagas − investido + saldo anterior dele`), nunca a sobra prevista. Ele **não é renda nem gasto**: fica fora de entradas/saídas, da base da meta em % e das quebras do dashboard; entra só na sobra e no saldo:
+  ```
+  saldoAnterior  = Σ carryover (entrada +, saída −)
+  sobraPrevista  = entradasPrevistas − saidasPrevistas − max(meta, investido) + saldoAnterior
+  saldoAtual     = entradasRecebidas − saidasPagas − investido + saldoAnterior
+  ```
+- **RF-55** Configuração `user_settings.carryover_mode`: **`ask`** (padrão) · `auto` · `off`. Ao abrir um mês (`decideCarryover`):
+  - mês anterior ainda no futuro → nada (é projeção, não saldo);
+  - já levado → `applied` se bate com o saldo atual do mês anterior; senão `stale` ("O saldo de novembro mudou: levou R$ 50, agora R$ 20 — Atualizar?"). No `auto` com o mês anterior encerrado, sincroniza sozinho;
+  - não levado → nada se saldo zero, `off` ou "Ignorar" (`month_settings.carryover_dismissed_at`); `auto` aplica quando o mês anterior terminou; `ask` oferece — também com o mês anterior em andamento, avisando que o valor pode mudar e quantos lançamentos dele ainda estão previstos.
+- **RF-56** O lançamento é um **snapshot**: guarda o valor do momento em que foi levado, nasce **realizado** no dia 1 do mês e é único por mês (índice parcial). Não é criado nem editado à mão (o `PATCH` responde 409); excluí-lo equivale a "Ignorar"; levar de novo desfaz o "Ignorar". Saldo zerado ao atualizar remove o lançamento.
+- **RF-57** Importação da planilha mensal: "VALOR MÊS ANTERIOR" / "SALDO (DO) MÊS ANTERIOR" / "SOBRA MÊS ANTERIOR" vira `carryover` (não receita extra). Se o mês já tem saldo anterior, a linha entra como extra.
 
 ## 7. Categorias e orçamento
 
@@ -113,6 +133,8 @@ Para o mês selecionado e com comparação ao mês anterior:
 - Fechamento dia 31 em fevereiro.
 - Template editado a partir de Mar não altera Jan/Fev nem overrides.
 - Cadastro de parcelamento na parcela 5/12 → 4 settled, 8 forecast, "falta pagar" correto.
+- Parcelado a receber de R$ 200 em 4× a partir de 05/11 → 4 receitas de R$ 50 (nov a fev, dia 5); não entra em "Para quitar tudo".
 - Quitação antecipada com desconto.
 - Meta em % com receita extra no mês.
+- Saldo anterior de R$ 50 com meta de 20%: a meta continua 20% das entradas, sem o saldo; novembro muda depois de levado → "mudou" e atualizar.
 - Planejamento com gastos filhos acima e abaixo do planejado.

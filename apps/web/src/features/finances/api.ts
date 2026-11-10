@@ -74,6 +74,21 @@ export function useUpdateMonthSettings(month: string) {
   })
 }
 
+/** Saldo do mês anterior (RF-55/56): levar/atualizar e ignorar. */
+export function useCarryoverMutations(month: string) {
+  const onSettled = useInvalidate()
+  return {
+    apply: useMutation({
+      mutationFn: () => api.post(`/months/${month}/carryover`, z.undefined()),
+      onSettled,
+    }),
+    dismiss: useMutation({
+      mutationFn: () => api.delete(`/months/${month}/carryover`, z.undefined()),
+      onSettled,
+    }),
+  }
+}
+
 // ─── Dashboard, projeção e vencimentos (Fase 3) ──────────────────────────────
 
 export function useDashboard(month: string, period: DashboardPeriod) {
@@ -208,14 +223,16 @@ export function useRecurringTemplateMutations() {
 // ─── Parcelamentos ───────────────────────────────────────────────────────────
 
 export type PlanFilter = 'active' | 'finished'
+/** A pagar (compras parceladas) ou a receber (RF-49). */
+export type PlanType = 'expense' | 'income'
 
-export function useInstallmentPlans(status: PlanFilter) {
+export function useInstallmentPlans(status: PlanFilter, type: PlanType = 'expense') {
   return useQuery({
-    queryKey: ['installment-plans', 'list', status],
+    queryKey: ['installment-plans', 'list', type, status],
     queryFn: async ({ signal }) =>
       (
         await api.get(
-          `/installment-plans?status=${status}`,
+          `/installment-plans?status=${status}&type=${type}`,
           listResponseSchema(installmentPlanSchema),
           signal,
         )
@@ -223,11 +240,11 @@ export function useInstallmentPlans(status: PlanFilter) {
   })
 }
 
-export function useInstallmentSummary() {
+export function useInstallmentSummary(type: PlanType = 'expense') {
   return useQuery({
-    queryKey: ['installment-plans', 'summary'],
+    queryKey: ['installment-plans', 'summary', type],
     queryFn: ({ signal }) =>
-      api.get('/installment-plans/summary', installmentSummarySchema, signal),
+      api.get(`/installment-plans/summary?type=${type}`, installmentSummarySchema, signal),
   })
 }
 

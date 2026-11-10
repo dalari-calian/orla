@@ -32,8 +32,8 @@ function AuthLayout({
     <div className="pt-safe flex min-h-dvh flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <Logo />
-          <h1 className="mt-6 text-title-1 font-bold">{title}</h1>
+          <Logo size="lg" className="animate-enter" />
+          <h1 className="mt-8 text-title-1 font-bold">{title}</h1>
           <p className="mt-1 text-subhead text-text-2">{subtitle}</p>
         </div>
         <div className="rounded-card bg-surface p-5 shadow-card md:p-6">{children}</div>

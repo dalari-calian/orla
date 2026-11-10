@@ -119,7 +119,7 @@ CRON_SECRET=             # protege /api/jobs/*
 APP_TIMEZONE=America/Sao_Paulo
 ```
 
-- `main` → produção. PRs → preview da Vercel apontando para um **branch do Neon** (o free permite branches).
+- `main` → produção, publicada pelo `deploy.yml` do GitHub Actions depois do CI verde e do backup pre-deploy (ver `16-deploy-e-backup.md`). PRs → preview da Vercel apontando para um **branch do Neon** (o free permite branches).
 
 ## ADRs (registro de decisões)
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { detectSeparator, parseCsv, toCsv } from './csv.ts'
 import { duplicateKey } from './drafts.ts'
+import { isCarryoverLine } from './monthly-sheet.ts'
 import { INSTALLMENTS_EXAMPLE, MONTHLY_SHEET_EXAMPLE, TRANSACTIONS_EXAMPLE } from './examples.ts'
 import {
   INSTALLMENT_FIELDS,
@@ -347,7 +348,7 @@ describe('planilha mensal', () => {
   })
   const byRow = (row: number) => drafts.find((item) => item.rowNumber === row)
 
-  it('entradas: salário fixo, mês anterior como extra; futuras previstas', () => {
+  it('entradas: salário fixo, mês anterior como saldo anterior; futuras previstas', () => {
     expect(byRow(3)?.draft).toMatchObject({
       type: 'income',
       nature: 'fixed',
@@ -356,8 +357,32 @@ describe('planilha mensal', () => {
       competenceMonth: '2026-01',
       date: '2026-01-01',
     })
-    expect(byRow(5)?.draft).toMatchObject({ type: 'income', nature: 'extra', amountCents: 20926 })
+    // RF-57: o saldo levado à mão na planilha vira saldo anterior, não receita extra.
+    expect(byRow(5)?.draft).toMatchObject({
+      type: 'income',
+      nature: 'carryover',
+      amountCents: 20926,
+    })
     expect(byRow(27)?.draft).toMatchObject({ status: 'forecast', competenceMonth: '2026-12' })
+  })
+
+  it('RF-57: reconhece as variações da linha de saldo anterior', () => {
+    for (const text of [
+      'valor mes anterior',
+      'saldo do mes anterior',
+      'sobra mes anterior',
+      'valor de mes anterior',
+    ]) {
+      expect(isCarryoverLine(text), text).toBe(true)
+    }
+    for (const text of [
+      'salario',
+      'valor duda me pagar',
+      'mes anterior',
+      'reembolso mes anterior',
+    ]) {
+      expect(isCarryoverLine(text), text).toBe(false)
+    }
   })
 
   it('despesas: fixa no cartão, pessoa, crédito, pix e sem tipo', () => {

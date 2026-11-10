@@ -11,6 +11,7 @@ import { MonthBarsChart } from './charts'
 import { monthLabel, shortMonthLabel } from './labels'
 
 const columns = [
+  { key: 'carryoverCents', label: 'Saldo anterior' },
   { key: 'incomeCents', label: 'Entradas' },
   { key: 'fixedCents', label: 'Fixas' },
   { key: 'installmentCents', label: 'Parcelas' },

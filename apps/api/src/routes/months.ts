@@ -12,6 +12,8 @@ import {
 } from '@orla/contracts'
 import type { PrismaClient } from '@orla/db'
 import { Router, type Request } from 'express'
+import { applyCarryover, dismissCarryover, resolveCarryover } from '../lib/carryover.ts'
+import type { Clock } from '../lib/clock.ts'
 import { centsToNumber } from '../lib/db.ts'
 import { notFound } from '../lib/errors.ts'
 import {
@@ -31,7 +33,7 @@ function paramMonth(req: Request): CompetenceMonth {
 }
 
 /** /months/:month — o mês inteiro: lançamentos (com os modelos materializados) e resumo. */
-export function monthsRouter(prisma: PrismaClient): Router {
+export function monthsRouter(prisma: PrismaClient, clock: Clock): Router {
   const router = Router()
 
   router.get('/months/:month', async (req, res) => {
@@ -40,6 +42,8 @@ export function monthsRouter(prisma: PrismaClient): Router {
     const competenceMonth = competenceMonthToDate(month)
 
     await materializeMonth(prisma, userId, month)
+    // Antes de ler o mês: no modo automático isso cria/atualiza o saldo anterior.
+    const carryover = await resolveCarryover(prisma, userId, month, clock)
     const [rows, monthSettings, settings] = await Promise.all([
       prisma.transaction.findMany({
         where: { userId, competenceMonth, deletedAt: null },
@@ -68,6 +72,7 @@ export function monthsRouter(prisma: PrismaClient): Router {
         defaultSavingsGoal: settings.savingsGoal as SavingsGoal,
         notes: monthSettings?.notes ?? null,
       },
+      carryover,
       transactions,
     }
     res.json(body)
@@ -99,6 +104,18 @@ export function monthsRouter(prisma: PrismaClient): Router {
       notes: row.notes,
     }
     res.json(body)
+  })
+
+  /** RF-56: leva (ou atualiza) o saldo atual do mês anterior para este mês. */
+  router.post('/months/:month/carryover', async (req, res) => {
+    await applyCarryover(prisma, userIdOf(req), paramMonth(req))
+    res.status(204).end()
+  })
+
+  /** RF-55: "Ignorar" — tira o saldo levado e não oferece de novo neste mês. */
+  router.delete('/months/:month/carryover', async (req, res) => {
+    await dismissCarryover(prisma, userIdOf(req), paramMonth(req))
+    res.status(204).end()
   })
 
   return router

@@ -21,7 +21,8 @@ export interface RefNames {
 export interface TransactionDraft extends RefNames {
   kind: 'transaction'
   type: 'income' | 'expense'
-  nature: 'fixed' | 'variable' | 'planned' | 'extra'
+  /** `carryover` = saldo do mês anterior (RF-57), vindo da planilha mensal. */
+  nature: 'fixed' | 'variable' | 'planned' | 'extra' | 'carryover'
   status: 'forecast' | 'settled'
   description: string
   amountCents: Cents

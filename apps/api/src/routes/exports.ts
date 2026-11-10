@@ -35,6 +35,7 @@ const NATURE: Record<string, string> = {
   planned: 'planejamento',
   extra: 'extra',
   installment: 'parcela',
+  carryover: 'saldo anterior',
 }
 const METHOD: Record<string, string> = {
   pix: 'pix',
@@ -107,6 +108,7 @@ async function plansTable(prisma: PrismaClient, userId: string): Promise<ExportT
   })
   return {
     columns: [
+      'tipo',
       'data_compra',
       'descricao',
       'estabelecimento',
@@ -124,6 +126,7 @@ async function plansTable(prisma: PrismaClient, userId: string): Promise<ExportT
         (item) => item.status === 'settled' && item.installmentNumber !== null,
       ).length
       return [
+        row.type === 'income' ? 'a receber' : 'a pagar',
         brDate(row.purchaseDate),
         row.description,
         row.payee?.name ?? null,
@@ -286,6 +289,7 @@ const COLUMNS: Record<string, Record<string, ColumnType>> = {
   },
   installmentPlans: {
     id: 'string',
+    type: 'string',
     description: 'string',
     payeeId: 'stringOrNull',
     categoryId: 'stringOrNull',
@@ -387,7 +391,9 @@ function coerce(table: Table, record: Record<string, unknown>): Record<string, u
   for (const [key, type] of Object.entries(COLUMNS[table] ?? {})) {
     const value = record[key]
     if (value === undefined) {
-      if (type.endsWith('OrNull')) out[key] = null
+      // Backups de antes do parcelado a receber: todo parcelamento era a pagar.
+      if (table === 'installmentPlans' && key === 'type') out[key] = 'expense'
+      else if (type.endsWith('OrNull')) out[key] = null
       else if (key === 'installmentNumber' || key === 'monthOfYear') out[key] = null
       else if (type === 'bool' || type === 'strings') continue
       else invalid(`${table}.${key} ausente`)

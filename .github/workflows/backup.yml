@@ -1,0 +1,121 @@
+# Backup do banco de produção (RE-03, docs/16-deploy-e-backup.md).
+#
+# Workflow REUTILIZÁVEL: não roda sozinho. É chamado por:
+#   - orla-backups/.github/workflows/backup-schedule.yml  → 00h e 12h (gavetas "segunda-00h"…)
+#   - .github/workflows/deploy.yml                          → antes de cada deploy (gaveta "pre-deploy")
+#
+# O que faz: pg_dump do Neon → criptografa com a chave PÚBLICA do age (só a sua chave
+# privada, guardada fora do GitHub, abre o arquivo) → grava a gaveta no branch `data` do
+# repositório privado, sobrescrevendo a anterior e sem acumular histórico.
+name: Backup (reutilizável)
+
+on:
+  workflow_call:
+    inputs:
+      slot:
+        description: 'Gaveta: "auto" (dia da semana + 00h/12h pelo horário de Brasília) ou um nome fixo, ex.: "pre-deploy"'
+        type: string
+        default: auto
+      backups_repo:
+        description: 'Repositório privado onde ficam os arquivos (dono/nome)'
+        type: string
+        required: true
+      postgres_major:
+        description: 'Versão do pg_dump (igual ou maior que a do Postgres do Neon)'
+        type: string
+        default: '17'
+    secrets:
+      BACKUP_DATABASE_URL:
+        description: 'URL DIRETA do Neon (sem "-pooler" no host), com sslmode=require'
+        required: true
+      BACKUP_AGE_RECIPIENT:
+        description: 'Chave pública do age (começa com "age1…")'
+        required: true
+      BACKUPS_REPO_TOKEN:
+        description: 'Token com escrita no repositório de backups. Omitido → usa o GITHUB_TOKEN de quem chamou.'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Dois backups nunca gravam ao mesmo tempo no repositório de backups.
+    concurrency:
+      group: orla-backup-write
+      cancel-in-progress: false
+    steps:
+      - name: Escolhe a gaveta
+        id: slot
+        env:
+          SLOT: ${{ inputs.slot }}
+        run: |
+          if [ "$SLOT" != "auto" ]; then
+            echo "name=$SLOT" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          days=(segunda terca quarta quinta sexta sabado domingo)
+          day=${days[$(( $(TZ=America/Sao_Paulo date +%u) - 1 ))]}
+          hour=$(TZ=America/Sao_Paulo date +%-H)
+          # O agendador do GitHub pode atrasar: até 11h59 conta como a rodada das 00h.
+          if [ "$hour" -lt 12 ]; then half=00h; else half=12h; fi
+          echo "name=${day}-${half}" >> "$GITHUB_OUTPUT"
+
+      - name: Instala o age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+
+      - name: pg_dump + criptografia
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          PG_MAJOR: ${{ inputs.postgres_major }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          # Formato custom (-Fc): já comprimido e restaurável com pg_restore.
+          docker run --rm -e DATABASE_URL "postgres:${PG_MAJOR}-alpine" \
+            sh -c 'pg_dump --format=custom --no-owner --no-acl "$DATABASE_URL"' \
+            | age --encrypt --recipient "$AGE_RECIPIENT" \
+            > "$RUNNER_TEMP/out/backup.dump.age"
+          size=$(stat -c %s "$RUNNER_TEMP/out/backup.dump.age")
+          # Um dump vazio/quebrado é minúsculo: falha em vez de sobrescrever uma gaveta boa.
+          if [ "$size" -lt 2048 ]; then
+            echo "::error::Backup suspeito (${size} bytes). Nada foi gravado."
+            exit 1
+          fi
+          echo "Backup criptografado: ${size} bytes"
+
+      - name: Grava a gaveta no repositório de backups
+        env:
+          GH_TOKEN: ${{ secrets.BACKUPS_REPO_TOKEN || github.token }}
+          REPO: ${{ inputs.backups_repo }}
+          SLOT: ${{ steps.slot.outputs.name }}
+        run: |
+          set -euo pipefail
+          url="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          dir="$RUNNER_TEMP/backups"
+          for attempt in 1 2 3; do
+            rm -rf "$dir" && mkdir -p "$dir" && cd "$dir"
+            git init -q -b data
+            git config user.name "orla-backup"
+            git config user.email "orla-backup@users.noreply.github.com"
+            # Traz as outras gavetas (se o branch já existe) e troca só a desta rodada.
+            if git fetch -q --depth 1 "$url" data 2>/dev/null; then
+              git checkout -q FETCH_HEAD -- . 2>/dev/null || true
+            fi
+            cp "$RUNNER_TEMP/out/backup.dump.age" "backup-${SLOT}.dump.age"
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > "backup-${SLOT}.txt"
+            git add -A
+            # Commit único, sem pai: o branch guarda só as gavetas atuais, sem histórico.
+            git commit -q -m "backup ${SLOT} $(date -u +%Y-%m-%dT%H:%MZ)"
+            if git push -q --force "$url" HEAD:data; then
+              echo "Gaveta backup-${SLOT} gravada em ${REPO} (branch data)"
+              exit 0
+            fi
+            echo "Push falhou (tentativa ${attempt}); tentando de novo…"
+            sleep $(( attempt * 5 ))
+          done
+          echo "::error::Não foi possível gravar o backup"
+          exit 1

@@ -18,6 +18,7 @@ import {
 } from '@orla/core'
 import {
   createInstallmentPlanRequestSchema,
+  installmentPlanTypeQuerySchema,
   payoffInstallmentPlanRequestSchema,
   updateInstallmentPlanRequestSchema,
   type InstallmentPlan,
@@ -25,6 +26,7 @@ import {
   type InstallmentSummary,
   type ListResponse,
   type PaymentMethod,
+  type TransactionType,
 } from '@orla/contracts'
 import type { Prisma, PrismaClient } from '@orla/db'
 import { Router } from 'express'
@@ -71,6 +73,7 @@ function toPlan(row: PlanRow, viewMonth: string): InstallmentPlan {
   }
   return {
     id: row.id,
+    type: row.type as TransactionType,
     description: row.description,
     payeeId: row.payeeId,
     categoryId: row.categoryId,
@@ -91,11 +94,14 @@ function toPlan(row: PlanRow, viewMonth: string): InstallmentPlan {
   }
 }
 
-const listQuerySchema = z.object({
+const listQuerySchema = installmentPlanTypeQuerySchema.extend({
   status: z.enum(['active', 'finished', 'all']).default('active'),
 })
 
-/** /installment-plans — compras parceladas (RF-40..48). */
+/** Parcelado a receber não tem cartão nem forma de pagamento escolhida (RF-49). */
+const INCOME_PAYMENT_METHOD = 'other'
+
+/** /installment-plans — compras parceladas (RF-40..48) e parcelados a receber (RF-49). */
 export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Router {
   const router = Router()
 
@@ -114,10 +120,11 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
   })
 
   router.get('/installment-plans', async (req, res) => {
-    const { status } = parse(listQuerySchema, req.query)
+    const { status, type } = parse(listQuerySchema, req.query)
     const rows = await prisma.installmentPlan.findMany({
       where: {
         userId: userIdOf(req),
+        type,
         deletedAt: null,
         ...(status === 'active' && { status: 'active' }),
         ...(status === 'finished' && { status: { in: ['paid_off', 'canceled'] } }),
@@ -147,9 +154,10 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
 
   router.get('/installment-plans/summary', async (req, res) => {
     const userId = userIdOf(req)
+    const { type } = parse(installmentPlanTypeQuerySchema, req.query)
     const month = clock.currentMonth()
     const rows = await prisma.installmentPlan.findMany({
-      where: { userId, deletedAt: null, status: 'active' },
+      where: { userId, type, deletedAt: null, status: 'active' },
       include: planInclude,
     })
     const plans = rows.map((row) => ({ row, plan: toPlan(row, month) }))
@@ -184,10 +192,12 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
   router.post('/installment-plans', async (req, res) => {
     const userId = userIdOf(req)
     const input = parse(createInstallmentPlanRequestSchema, req.body)
-    const isCredit = input.paymentMethod === 'credit'
+    const receivable = input.type === 'income'
+    const paymentMethod = receivable ? INCOME_PAYMENT_METHOD : input.paymentMethod
+    const isCredit = paymentMethod === 'credit'
     const { card } = await assertRefs(prisma, userId, {
       categoryId: input.categoryId,
-      categoryKind: 'expense',
+      categoryKind: input.type,
       accountId: input.accountId,
       payeeId: input.payeeId,
       creditCardId: isCredit ? input.creditCardId : null,
@@ -216,10 +226,11 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
       const plan = await tx.installmentPlan.create({
         data: {
           userId,
+          type: input.type,
           description: input.description,
           payeeId: input.payeeId ?? null,
           categoryId: input.categoryId ?? null,
-          paymentMethod: input.paymentMethod,
+          paymentMethod,
           creditCardId: isCredit ? (input.creditCardId ?? null) : null,
           accountId: input.accountId ?? null,
           purchaseDate: isoDateToDate(input.purchaseDate),
@@ -232,7 +243,7 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
       await tx.transaction.createMany({
         data: schedule.map((item) => ({
           userId,
-          type: 'expense',
+          type: plan.type,
           nature: 'installment',
           status: item.status,
           description: input.description,
@@ -274,7 +285,7 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
     }
     const { card } = await assertRefs(prisma, userId, {
       categoryId: input.categoryId,
-      categoryKind: 'expense',
+      categoryKind: current.type as TransactionType,
       accountId: input.accountId,
       payeeId: input.payeeId,
       creditCardId: input.creditCardId !== undefined ? creditCardId : undefined,
@@ -361,7 +372,7 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
           await tx.transaction.createMany({
             data: edit.create.map((item) => ({
               userId,
-              type: 'expense',
+              type: current.type,
               nature: 'installment',
               status: 'forecast',
               description: shared.description,
@@ -408,10 +419,13 @@ export function installmentPlansRouter(prisma: PrismaClient, clock: Clock): Rout
       await tx.transaction.create({
         data: {
           userId,
-          type: 'expense',
+          type: current.type,
           nature: 'installment',
           status: 'settled',
-          description: `Quitação: ${current.description}`,
+          description:
+            current.type === 'income'
+              ? `Recebido antecipado: ${current.description}`
+              : `Quitação: ${current.description}`,
           amountCents: BigInt(payoff.amountCents),
           competenceMonth: competenceMonthToDate(
             input.competenceMonth ?? isoDateToCompetenceMonth(input.date),

@@ -74,7 +74,7 @@ O SheetJS (0.20.3, versão oficial do site deles — a do npm tem falhas conheci
 
 - **RE-01** Exportar por entidade em CSV (pt-BR, `;`) ou XLSX, com filtro de período.
 - **RE-02** (Fase 5: inclui classes, metas, ativos, operações e proventos; Fase 6: simulações e aportes; Fase 7: balanços com as linhas) **Backup completo** em JSON (todas as tabelas do usuário, versão do schema) e **restaurar** a partir dele (substituir ou mesclar).
-- **RE-03** Backup automático do banco inteiro semanal via GitHub Actions (`pg_dump` criptografado com `age`/GPG) — porque o free do Neon tem janela de restauração curta.
+- **RE-03** Backup automático do banco inteiro via GitHub Actions (`pg_dump` criptografado com `age`) às **00h e 12h** de Brasília e **antes de cada deploy**, em gavetas que se sobrescrevem (14 diárias + `pre-deploy`) num repositório privado — porque o free do Neon tem janela de restauração curta. Detalhes, ativação e restauração em `16-deploy-e-backup.md`.
 
 ## 3. Entrada manual (UX)
 

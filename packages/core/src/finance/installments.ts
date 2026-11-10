@@ -283,3 +283,19 @@ export function planInstallmentEdit(input: {
     .map((item) => item.id)
   return plan
 }
+
+/**
+ * RF-49 "Dividir com alguém": valor sugerido a receber de quem divide a compra com você
+ * em `people` partes iguais (você incluído). Arredonda para baixo — o centavo que sobra
+ * fica com quem comprou. Ex.: R$ 400 entre 2 → R$ 200; R$ 100,01 entre 2 → R$ 50,00.
+ */
+export function splitShareCents(totalCents: Cents, people = 2): Cents {
+  assertCents(totalCents, 'total')
+  if (totalCents <= 0) throw new InstallmentError('O total precisa ser maior que zero')
+  if (!Number.isInteger(people) || people < 2) {
+    throw new InstallmentError('Dividir exige pelo menos 2 pessoas')
+  }
+  const share = Math.floor(totalCents / people)
+  if (share < 1) throw new InstallmentError('O valor é pequeno demais para dividir')
+  return share
+}

@@ -1,0 +1,97 @@
+# Deploy de produção (docs/16-deploy-e-backup.md).
+#
+# DESLIGADO até existir a variável de repositório DEPLOY_ENABLED=true
+# (Settings › Secrets and variables › Actions › Variables). Sem ela, as rodadas
+# aparecem como "skipped" e nada é executado.
+#
+# Ordem: CI verde na main → backup "pre-deploy" → migrations no Neon → deploy na Vercel.
+# Se qualquer passo falhar, os seguintes não rodam e a produção fica como estava.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Deploy manual (Actions › Deploy › Run workflow), ex.: refazer após uma falha.
+  workflow_dispatch:
+
+# Um deploy por vez; um novo espera o anterior terminar (nunca cancela no meio).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    uses: ./.github/workflows/backup.yml
+    permissions:
+      contents: write
+    with:
+      slot: pre-deploy
+      backups_repo: ${{ vars.BACKUPS_REPO }}
+    secrets:
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+      BACKUPS_REPO_TOKEN: ${{ secrets.BACKUPS_REPO_TOKEN }}
+
+  deploy:
+    needs: backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_CLI: vercel@65.12.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # O commit que passou no CI (no deploy manual, o último da main).
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # RNF-31: migrations versionadas aplicadas antes do código novo entrar no ar.
+      - name: Migrations no Neon
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: pnpm db:migrate
+
+      - name: Build na Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          pnpm dlx "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
+          pnpm dlx "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
+
+      - name: Publica em produção
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: pnpm dlx "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+      - name: Confere a saúde da API
+        if: vars.PRODUCTION_URL != ''
+        env:
+          URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS "$URL/api/v1/health"; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::A API não respondeu em $URL/api/v1/health"
+          exit 1

@@ -1,9 +1,9 @@
-import { todayIsoDate } from '@orla/core'
+import { splitShareCents, todayIsoDate } from '@orla/core'
 import { formatBRL } from '@orla/core/money'
 import type { InstallmentPlan, InstallmentSummary, Transaction } from '@orla/contracts'
-import { CalendarRange, Check, Circle, Plus } from 'lucide-react'
+import { CalendarRange, Check, Circle, HandCoins, Plus, Users } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { AnimatedMoney } from '@/components/ui/AnimatedMoney'
@@ -26,6 +26,7 @@ import {
   useInstallmentPlans,
   useInstallmentSummary,
   type PlanFilter,
+  type PlanType,
 } from './api'
 import { useEntrySheet } from './EntrySheet'
 import { InstallmentPlanForm } from './InstallmentPlanForm'
@@ -33,24 +34,115 @@ import { shortDate, shortMonthLabel } from './labels'
 
 const backToFinances = { to: '/financas', label: 'Finanças' }
 
-/** RF-45: "Para quitar tudo" + compromisso mensal em barras ("livre em ago/2027"). */
-function SummaryHero({ summary }: { summary: InstallmentSummary }) {
+/** Textos que mudam entre parcelado a pagar e a receber (RF-49). */
+const planCopy = {
+  expense: {
+    heroTitle: 'Para quitar tudo',
+    heroMonth: 'Compromisso este mês',
+    heroFree: 'livre em',
+    barsLabel: 'Parcelas previstas nos próximos 12 meses',
+    remaining: 'Falta pagar',
+    done: 'Pago',
+    doneCount: 'pagas',
+    emptyTitle: 'Nenhum parcelamento ativo',
+    emptyDescription: 'Cadastre compras parceladas e veja quanto falta para quitar tudo.',
+    newLabel: 'Novo parcelamento',
+    fallbackSubtitle: 'Parcelamento',
+    settledLabel: 'paga',
+    payoffButton: 'Quitar antecipado',
+    payoffTitle: 'Quitar antecipado',
+    payoffAmount: 'Valor pago',
+    payoffDate: 'Data do pagamento',
+    payoffConfirm: 'Confirmar quitação',
+    payoffDone: 'Parcelamento quitado',
+    payoffText: (remaining: string) =>
+      `Falta ${remaining}. Informe quanto você pagou (com o desconto, se teve): as parcelas restantes saem e entra um pagamento único.`,
+    paidOff: 'Quitado em',
+    cancelButton: 'Cancelar compra',
+    cancelConfirm: 'Cancelar o parcelamento? As parcelas que faltam serão removidas.',
+    canceled: 'Parcelamento cancelado',
+    canceledNote: 'Cancelado: as parcelas que faltavam foram removidas.',
+    removed: 'Parcelamento excluído',
+    editTitle: 'Editar parcelamento',
+    updated: 'Parcelamento atualizado',
+    payoffRow: 'Quitação',
+    detailTitle: 'Parcelamento',
+  },
+  income: {
+    heroTitle: 'Falta receber',
+    heroMonth: 'Entra este mês',
+    heroFree: 'tudo recebido em',
+    barsLabel: 'Parcelas a receber nos próximos 12 meses',
+    remaining: 'Falta receber',
+    done: 'Recebido',
+    doneCount: 'recebidas',
+    emptyTitle: 'Nada a receber',
+    emptyDescription:
+      'Alguém vai te pagar em parcelas? Ex.: a parte de outra pessoa numa compra que você parcelou.',
+    newLabel: 'Novo a receber',
+    fallbackSubtitle: 'A receber',
+    settledLabel: 'recebida',
+    payoffButton: 'Recebi tudo antes',
+    payoffTitle: 'Recebi tudo antes',
+    payoffAmount: 'Valor recebido',
+    payoffDate: 'Data do recebimento',
+    payoffConfirm: 'Confirmar recebimento',
+    payoffDone: 'Recebimento registrado',
+    payoffText: (remaining: string) =>
+      `Falta ${remaining}. Informe quanto você recebeu: as parcelas restantes saem e entra um recebimento único.`,
+    paidOff: 'Recebido em',
+    cancelButton: 'Cancelar',
+    cancelConfirm: 'Cancelar o parcelado a receber? As parcelas que faltam serão removidas.',
+    canceled: 'Parcelado a receber cancelado',
+    canceledNote: 'Cancelado: as parcelas que faltavam foram removidas.',
+    removed: 'Parcelado a receber excluído',
+    editTitle: 'Editar parcelado a receber',
+    updated: 'Parcelado a receber atualizado',
+    payoffRow: 'Antecipado',
+    detailTitle: 'A receber',
+  },
+} as const
+
+/** `?tipo=receber` abre a aba "A receber". */
+const TYPE_PARAM = 'tipo'
+function plansPath(type: PlanType): string {
+  return type === 'income'
+    ? `/financas/parcelamentos?${TYPE_PARAM}=receber`
+    : '/financas/parcelamentos'
+}
+
+/**
+ * RF-45: "Para quitar tudo" + compromisso mensal em barras ("livre em ago/2027").
+ * RF-49: no "A receber", quanto falta receber e quanto entra por mês.
+ */
+function SummaryHero({ summary, type }: { summary: InstallmentSummary; type: PlanType }) {
+  const text = planCopy[type]
   const max = Math.max(1, ...summary.monthly.map((item) => item.amountCents))
   const current = summary.monthly[0]?.amountCents ?? 0
   return (
     <Card>
-      <p className="text-subhead text-text-2">Para quitar tudo</p>
-      <p className="mt-1 text-[34px] leading-tight font-semibold tracking-tight tabular">
+      <p className="text-subhead text-text-2">{text.heroTitle}</p>
+      <p
+        className={cn(
+          'mt-1 text-[34px] leading-tight font-semibold tracking-tight tabular',
+          type === 'income' && summary.payoffTotalCents > 0 && 'text-positive',
+        )}
+      >
         <AnimatedMoney cents={summary.payoffTotalCents} />
       </p>
       <p className="mt-1 text-footnote text-text-2">
-        Compromisso este mês: <span className="font-medium text-text">{formatBRL(current)}</span>
-        {summary.payoffTotalCents > 0 && <> · livre em {shortMonthLabel(summary.freeFromMonth)}</>}
+        {text.heroMonth}: <span className="font-medium text-text">{formatBRL(current)}</span>
+        {summary.payoffTotalCents > 0 && (
+          <>
+            {' '}
+            · {text.heroFree} {shortMonthLabel(summary.freeFromMonth)}
+          </>
+        )}
       </p>
       <div
         className="mt-5 flex h-28 items-end gap-1"
         role="img"
-        aria-label={`Parcelas previstas nos próximos 12 meses: ${summary.monthly
+        aria-label={`${text.barsLabel}: ${summary.monthly
           .map((item) => `${shortMonthLabel(item.month)} ${formatBRL(item.amountCents)}`)
           .join(', ')}`}
       >
@@ -60,7 +152,10 @@ function SummaryHero({ summary }: { summary: InstallmentSummary }) {
             className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
           >
             <div
-              className="w-full origin-bottom animate-grow-y rounded-t-[4px] bg-accent/80"
+              className={cn(
+                'w-full origin-bottom animate-grow-y rounded-t-[4px]',
+                type === 'income' ? 'bg-positive/80' : 'bg-accent/80',
+              )}
               style={{
                 animationDelay: `${index * 30}ms`,
                 height: `${(item.amountCents / max) * 100}%`,
@@ -87,9 +182,13 @@ function PlanCard({
   payeeName?: string | undefined
 }) {
   const { indicators } = plan
+  const text = planCopy[plan.type]
+  const receivable = plan.type === 'income'
   const statusLabel =
     plan.status === 'paid_off'
-      ? 'Quitado'
+      ? receivable
+        ? 'Recebido'
+        : 'Quitado'
       : plan.status === 'canceled'
         ? 'Cancelado'
         : indicators.phase === 'not_started'
@@ -98,7 +197,7 @@ function PlanCard({
             ? `${indicators.currentNumber}/${plan.installmentsCount}`
             : indicators.remainingCount === 0
               ? 'Finalizado'
-              : `${indicators.paidCount}/${plan.installmentsCount} pagas`
+              : `${indicators.paidCount}/${plan.installmentsCount} ${text.doneCount}`
   return (
     <Link
       to={`/financas/parcelamentos/${plan.id}`}
@@ -108,19 +207,29 @@ function PlanCard({
         <div className="min-w-0">
           <p className="truncate text-headline font-semibold">{plan.description}</p>
           <p className="truncate text-footnote text-text-2">
-            {[payeeName, cardName ?? (plan.paymentMethod === 'boleto' ? 'Boleto/carnê' : undefined)]
-              .filter(Boolean)
-              .join(' · ') || 'Parcelamento'}
+            {(receivable
+              ? payeeName && `De ${payeeName}`
+              : [
+                  payeeName,
+                  cardName ?? (plan.paymentMethod === 'boleto' ? 'Boleto/carnê' : undefined),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')) || text.fallbackSubtitle}
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-accent/12 px-2.5 py-1 text-footnote font-semibold text-accent tabular">
+        <span
+          className={cn(
+            'shrink-0 rounded-full px-2.5 py-1 text-footnote font-semibold tabular',
+            receivable ? 'bg-positive/12 text-positive' : 'bg-accent/12 text-accent',
+          )}
+        >
           {statusLabel}
         </span>
       </div>
       <ProgressBar value={indicators.progress} className="mt-3" />
       <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-footnote text-text-2 tabular">
         <span>
-          Pago {formatBRL(indicators.paidCents)} de {formatBRL(plan.totalCents)}
+          {text.done} {formatBRL(indicators.paidCents)} de {formatBRL(plan.totalCents)}
         </span>
         {indicators.remainingCents > 0 && (
           <span className="font-medium text-text">
@@ -135,14 +244,19 @@ function PlanCard({
   )
 }
 
-/** /financas/parcelamentos */
+/** /financas/parcelamentos — abas "A pagar" e "A receber" (`?tipo=receber`). */
 export function InstallmentPlansPage() {
+  const [params, setParams] = useSearchParams()
+  const type: PlanType = params.get(TYPE_PARAM) === 'receber' ? 'income' : 'expense'
+  const text = planCopy[type]
   const [filter, setFilter] = useState<PlanFilter>('active')
-  const summary = useInstallmentSummary()
-  const list = useInstallmentPlans(filter)
+  const summary = useInstallmentSummary(type)
+  const list = useInstallmentPlans(filter, type)
   const cardList = creditCards.useList()
   const payeeList = payees.useList()
-  const { openNew } = useEntrySheet()
+  const { openNewPlan } = useEntrySheet()
+  const setType = (next: PlanType) =>
+    setParams(next === 'income' ? { [TYPE_PARAM]: 'receber' } : {}, { replace: true })
   const cardName = new Map((cardList.data ?? []).map((card) => [card.id, card.name]))
   const payeeName = new Map((payeeList.data ?? []).map((payee) => [payee.id, payee.name]))
 
@@ -154,19 +268,30 @@ export function InstallmentPlansPage() {
         actions={
           <Button
             variant="plain"
-            onClick={() => openNew('installment')}
+            onClick={() => openNewPlan(type)}
             className="px-3"
-            aria-label="Novo parcelamento"
+            aria-label={text.newLabel}
           >
             <Plus className="size-5" aria-hidden />
             <span className="hidden sm:inline">Novo</span>
           </Button>
         }
       />
+      <div className="mb-4 lg:max-w-[360px]">
+        <SegmentedControl
+          label="Parcelados a pagar ou a receber"
+          value={type}
+          onChange={setType}
+          options={[
+            { value: 'expense', label: 'A pagar' },
+            { value: 'income', label: 'A receber' },
+          ]}
+        />
+      </div>
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
         <div className="lg:sticky lg:top-6">
           {summary.data ? (
-            <SummaryHero summary={summary.data} />
+            <SummaryHero summary={summary.data} type={type} />
           ) : summary.isError ? (
             <Card>
               <ErrorState
@@ -189,7 +314,7 @@ export function InstallmentPlansPage() {
               { value: 'finished', label: 'Finalizados' },
             ]}
           />
-          <SlideSwap index={filter === 'active' ? 0 : 1}>
+          <SlideSwap index={(type === 'income' ? 2 : 0) + (filter === 'active' ? 0 : 1)}>
             {list.isPending ? (
               <div className="space-y-3">
                 <Skeleton className="h-32 rounded-card" />
@@ -205,18 +330,12 @@ export function InstallmentPlansPage() {
             ) : list.data.length === 0 ? (
               <Card className="p-0 md:p-0">
                 <EmptyState
-                  icon={CalendarRange}
-                  title={
-                    filter === 'active' ? 'Nenhum parcelamento ativo' : 'Nada finalizado ainda'
-                  }
-                  description={
-                    filter === 'active'
-                      ? 'Cadastre compras parceladas e veja quanto falta para quitar tudo.'
-                      : undefined
-                  }
+                  icon={type === 'income' ? HandCoins : CalendarRange}
+                  title={filter === 'active' ? text.emptyTitle : 'Nada finalizado ainda'}
+                  description={filter === 'active' ? text.emptyDescription : undefined}
                   action={
                     filter === 'active' && (
-                      <Button onClick={() => openNew('installment')}>Novo parcelamento</Button>
+                      <Button onClick={() => openNewPlan(type)}>{text.newLabel}</Button>
                     )
                   }
                 />
@@ -248,10 +367,13 @@ function InstallmentCheck({
   item,
   label,
   editable,
+  settledLabel,
 }: {
   item: Transaction
   label: string
   editable: boolean
+  /** "paga" ou "recebida". */
+  settledLabel: string
 }) {
   const { settle, unsettle } = useTransactionMutations()
   const toast = useToast()
@@ -274,7 +396,7 @@ function InstallmentCheck({
     return (
       <span
         className="flex size-6 shrink-0 items-center justify-center text-text-3"
-        aria-label={settled ? 'Paga' : 'Prevista'}
+        aria-label={settled ? settledLabel : 'Prevista'}
       >
         {settled ? mark : empty}
       </span>
@@ -286,7 +408,9 @@ function InstallmentCheck({
       disabled={busy}
       aria-pressed={settled}
       aria-label={
-        settled ? `Marcar a parcela ${label} como prevista` : `Marcar a parcela ${label} como paga`
+        settled
+          ? `Marcar a parcela ${label} como prevista`
+          : `Marcar a parcela ${label} como ${settledLabel}`
       }
       onClick={() => {
         setToggled(true)
@@ -308,18 +432,22 @@ export function InstallmentPlanDetailPage() {
   const query = useInstallmentPlan(id)
   const mutations = useInstallmentPlanMutations()
   const cardList = creditCards.useList()
+  const payeeList = payees.useList()
+  const { openNewPlan } = useEntrySheet()
   const toast = useToast()
   const navigate = useNavigate()
   const [action, setAction] = useState<Action>(null)
   const [payoffAmount, setPayoffAmount] = useState<number | null>(null)
   const [payoffDate, setPayoffDate] = useState<string>(todayIsoDate())
 
-  const back = { to: '/financas/parcelamentos', label: 'Parcelamentos' }
+  const planType: PlanType = query.data?.plan.type ?? 'expense'
+  const text = planCopy[planType]
+  const back = { to: plansPath(planType), label: 'Parcelamentos' }
 
   if (query.isPending) {
     return (
       <>
-        <PageHeader title="Parcelamento" back={back} />
+        <PageHeader title={text.detailTitle} back={back} />
         <Skeleton className="h-48 rounded-card" />
       </>
     )
@@ -327,7 +455,7 @@ export function InstallmentPlanDetailPage() {
   if (query.isError) {
     return (
       <>
-        <PageHeader title="Parcelamento" back={back} />
+        <PageHeader title={text.detailTitle} back={back} />
         <Card>
           <ErrorState
             title="Não foi possível abrir este parcelamento"
@@ -342,7 +470,19 @@ export function InstallmentPlanDetailPage() {
   const { plan, installments } = query.data
   const { indicators } = plan
   const card = cardList.data?.find((item) => item.id === plan.creditCardId)
+  const payee = payeeList.data?.find((item) => item.id === plan.payeeId)
+  const receivable = plan.type === 'income'
   const active = plan.status === 'active'
+  // "Dividir com alguém": abre um parcelado a receber com metade do valor, no mesmo ritmo.
+  const firstInstallment = installments.find((item) => item.installmentNumber === 1)
+  const splitWithSomeone = () =>
+    openNewPlan('income', {
+      description: `${plan.description} — parte de quem divide`,
+      totalCents: splitShareCents(plan.totalCents),
+      installmentsCount: plan.installmentsCount,
+      ...(firstInstallment && { purchaseDate: firstInstallment.date }),
+      firstCompetenceMonth: plan.firstCompetenceMonth,
+    })
   const close = () => {
     setAction(null)
     mutations.update.reset()
@@ -356,14 +496,27 @@ export function InstallmentPlanDetailPage() {
       <PageHeader
         title={plan.description}
         back={back}
-        subtitle={card ? `Cartão ${card.name}` : 'Boleto / carnê'}
+        subtitle={
+          receivable
+            ? payee
+              ? `A receber de ${payee.name}`
+              : 'A receber'
+            : card
+              ? `Cartão ${card.name}`
+              : 'Boleto / carnê'
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
         <Card className="space-y-4 lg:sticky lg:top-6">
           <div>
-            <p className="text-subhead text-text-2">Falta pagar</p>
-            <p className="mt-1 text-[34px] leading-tight font-semibold tracking-tight tabular">
+            <p className="text-subhead text-text-2">{text.remaining}</p>
+            <p
+              className={cn(
+                'mt-1 text-[34px] leading-tight font-semibold tracking-tight tabular',
+                receivable && indicators.remainingCents > 0 && 'text-positive',
+              )}
+            >
               <AnimatedMoney cents={indicators.remainingCents} />
             </p>
           </div>
@@ -374,7 +527,7 @@ export function InstallmentPlanDetailPage() {
               <dd className="text-headline font-semibold tabular">{formatBRL(plan.totalCents)}</dd>
             </div>
             <div>
-              <dt className="text-text-2">Pago</dt>
+              <dt className="text-text-2">{text.done}</dt>
               <dd className="text-headline font-semibold tabular">
                 {formatBRL(indicators.paidCents)}
               </dd>
@@ -394,15 +547,20 @@ export function InstallmentPlanDetailPage() {
           </dl>
           {plan.status === 'paid_off' && plan.payoffDiscountCents !== null && (
             <p className="rounded-field bg-positive/12 px-3 py-2 text-footnote text-text">
-              Quitado em {shortDate(plan.paidOffAt ?? '')} ·{' '}
-              {plan.payoffDiscountCents >= 0
-                ? `desconto de ${formatBRL(plan.payoffDiscountCents)}`
-                : `pagou ${formatBRL(-plan.payoffDiscountCents)} a mais`}
+              {text.paidOff} {shortDate(plan.paidOffAt ?? '')}
+              {receivable
+                ? plan.payoffDiscountCents > 0 &&
+                  ` · ${formatBRL(plan.payoffDiscountCents)} a menos que o combinado`
+                : ` · ${
+                    plan.payoffDiscountCents >= 0
+                      ? `desconto de ${formatBRL(plan.payoffDiscountCents)}`
+                      : `pagou ${formatBRL(-plan.payoffDiscountCents)} a mais`
+                  }`}
             </p>
           )}
           {plan.status === 'canceled' && (
             <p className="rounded-field bg-surface-2 px-3 py-2 text-footnote text-text-2">
-              Cancelado: as parcelas que faltavam foram removidas.
+              {text.canceledNote}
             </p>
           )}
           <div className="flex flex-wrap gap-2 border-t border-separator pt-3">
@@ -411,6 +569,12 @@ export function InstallmentPlanDetailPage() {
                 <Button variant="secondary" onClick={() => setAction('edit')}>
                   Editar
                 </Button>
+                {!receivable && (
+                  <Button variant="secondary" onClick={splitWithSomeone}>
+                    <Users className="size-4" aria-hidden />
+                    Dividir com alguém
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -418,25 +582,20 @@ export function InstallmentPlanDetailPage() {
                     setAction('payoff')
                   }}
                 >
-                  Quitar antecipado
+                  {text.payoffButton}
                 </Button>
                 <Button
                   variant="destructive"
                   loading={mutations.cancel.isPending}
                   onClick={() => {
-                    if (
-                      !window.confirm(
-                        'Cancelar o parcelamento? As parcelas que faltam serão removidas.',
-                      )
-                    )
-                      return
+                    if (!window.confirm(text.cancelConfirm)) return
                     mutations.cancel.mutate(plan.id, {
-                      onSuccess: () => toast({ message: 'Parcelamento cancelado' }),
+                      onSuccess: () => toast({ message: text.canceled }),
                       onError,
                     })
                   }}
                 >
-                  Cancelar compra
+                  {text.cancelButton}
                 </Button>
               </>
             )}
@@ -446,9 +605,9 @@ export function InstallmentPlanDetailPage() {
               onClick={() =>
                 mutations.remove.mutate(plan.id, {
                   onSuccess: () => {
-                    void navigate('/financas/parcelamentos')
+                    void navigate(plansPath(plan.type))
                     toast({
-                      message: 'Parcelamento excluído',
+                      message: text.removed,
                       action: {
                         label: 'Desfazer',
                         onClick: () => mutations.restore.mutate(plan.id, { onError }),
@@ -479,25 +638,31 @@ export function InstallmentPlanDetailPage() {
                 <InstallmentCheck
                   item={item}
                   label={`${item.installmentNumber ?? ''}/${plan.installmentsCount}`}
+                  settledLabel={text.settledLabel}
                   // Só dá para marcar/desmarcar parcelas de um parcelamento ativo (a quitação é fixa).
                   editable={active && item.installmentNumber !== null}
                 />
                 <span className="w-14 shrink-0 text-subhead font-medium tabular">
                   {item.installmentNumber
                     ? `${item.installmentNumber}/${plan.installmentsCount}`
-                    : 'Quitação'}
+                    : text.payoffRow}
                 </span>
                 <span className="flex-1 text-subhead text-text-2">
                   {shortMonthLabel(item.competenceMonth)}
                 </span>
-                <span className="text-body font-medium tabular">{formatBRL(item.amountCents)}</span>
+                <span
+                  className={cn('text-body font-medium tabular', receivable && 'text-positive')}
+                >
+                  {receivable && '+'}
+                  {formatBRL(item.amountCents)}
+                </span>
               </li>
             ))}
           </ul>
         </Card>
       </div>
 
-      <Sheet open={action === 'edit'} onClose={close} title="Editar parcelamento">
+      <Sheet open={action === 'edit'} onClose={close} title={text.editTitle}>
         {action === 'edit' && (
           <InstallmentPlanForm
             initial={plan}
@@ -505,21 +670,26 @@ export function InstallmentPlanDetailPage() {
             error={mutations.update.error}
             onUpdate={async (values) => {
               await mutations.update.mutateAsync({ id: plan.id, ...values })
-              toast({ message: 'Parcelamento atualizado' })
+              toast({ message: text.updated })
               close()
             }}
           />
         )}
       </Sheet>
 
-      <Sheet open={action === 'payoff'} onClose={close} title="Quitar antecipado">
+      <Sheet open={action === 'payoff'} onClose={close} title={text.payoffTitle}>
         <div className="space-y-4">
           <p className="text-subhead text-text-2">
-            Falta {formatBRL(indicators.remainingCents)}. Informe quanto você pagou (com o desconto,
-            se teve): as parcelas restantes saem e entra um pagamento único.
+            {text.payoffText(formatBRL(indicators.remainingCents))}
           </p>
-          <MoneyInput label="Valor pago" value={payoffAmount} onChange={setPayoffAmount} large />
-          {payoffAmount !== null &&
+          <MoneyInput
+            label={text.payoffAmount}
+            value={payoffAmount}
+            onChange={setPayoffAmount}
+            large
+          />
+          {!receivable &&
+            payoffAmount !== null &&
             payoffAmount > 0 &&
             payoffAmount < indicators.remainingCents && (
               <p className="px-1 text-footnote text-positive">
@@ -527,7 +697,7 @@ export function InstallmentPlanDetailPage() {
               </p>
             )}
           <TextField
-            label="Data do pagamento"
+            label={text.payoffDate}
             type="date"
             value={payoffDate}
             onChange={(event) => setPayoffDate(event.target.value)}
@@ -546,14 +716,14 @@ export function InstallmentPlanDetailPage() {
                 { id: plan.id, amountCents: payoffAmount ?? 0, date: payoffDate },
                 {
                   onSuccess: () => {
-                    toast({ message: 'Parcelamento quitado' })
+                    toast({ message: text.payoffDone })
                     close()
                   },
                 },
               )
             }
           >
-            Confirmar quitação
+            {text.payoffConfirm}
           </Button>
         </div>
       </Sheet>

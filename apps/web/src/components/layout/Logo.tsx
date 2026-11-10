@@ -17,13 +17,27 @@ export function LogoMark({ className }: { className?: string }) {
   )
 }
 
+const logoSizes = {
+  /** Barra lateral e cabeçalhos. */
+  md: { text: 'gap-2 text-title-2', mark: 'size-7' },
+  /** Telas de entrada (login/cadastro): marca em destaque, maior que o título da página. */
+  lg: { text: 'gap-3 text-[40px] leading-none', mark: 'size-12' },
+} as const
+
 /** Logotipo tipográfico: "orla" em minúsculas, semibold. */
-export function Logo({ className }: { className?: string }) {
+export function Logo({
+  className,
+  size = 'md',
+}: {
+  className?: string
+  size?: keyof typeof logoSizes
+}) {
+  const styles = logoSizes[size]
   return (
     <span
-      className={`inline-flex items-center gap-2 text-title-2 font-semibold tracking-tight ${className ?? ''}`}
+      className={`inline-flex items-center font-semibold tracking-tight ${styles.text} ${className ?? ''}`}
     >
-      <LogoMark className="size-7" />
+      <LogoMark className={styles.mark} />
       orla
     </span>
   )

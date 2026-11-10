@@ -18,6 +18,7 @@ import {
 } from '@orla/contracts'
 import type { Prisma, PrismaClient } from '@orla/db'
 import { Router } from 'express'
+import { dismissCarryover } from '../lib/carryover.ts'
 import { ensureFound, paramId } from '../lib/db.ts'
 import { conflict, validationError } from '../lib/errors.ts'
 import {
@@ -156,6 +157,9 @@ export function transactionsRouter(prisma: PrismaClient): Router {
     const userId = userIdOf(req)
     const current = await findOwned(userId, paramId(req))
     const input = parse(updateTransactionRequestSchema, req.body)
+    if (current.nature === 'carryover') {
+      throw conflict('O saldo do mês anterior se atualiza pelo aviso no topo do mês')
+    }
     const generated = current.recurringTemplateId !== null || current.installmentPlanId !== null
 
     const type = (input.type ?? current.type) as TransactionType
@@ -290,6 +294,12 @@ export function transactionsRouter(prisma: PrismaClient): Router {
     if (current.installmentPlanId) {
       throw conflict('Parcelas são alteradas pelo parcelamento (editar, quitar ou cancelar)')
     }
+    if (current.nature === 'carryover') {
+      // Excluir o saldo anterior = "Ignorar" (RF-55): não oferece de novo neste mês.
+      await dismissCarryover(prisma, current.userId, dateToCompetenceMonth(current.competenceMonth))
+      res.status(204).end()
+      return
+    }
     await prisma.$transaction([
       // Gastos vinculados a um planejamento excluído continuam existindo, sem vínculo.
       prisma.transaction.updateMany({
@@ -306,6 +316,9 @@ export function transactionsRouter(prisma: PrismaClient): Router {
     const current = await findOwned(userId, paramId(req), true)
     if (current.installmentPlanId) {
       throw conflict('Parcelas voltam junto com o parcelamento')
+    }
+    if (current.nature === 'carryover') {
+      throw conflict('Para trazer o saldo de volta, use "Levar" no topo do mês')
     }
     const row = await prisma.transaction.update({
       where: { id: current.id },

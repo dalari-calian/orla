@@ -107,7 +107,7 @@ export function createApp(deps: AppDeps): Express {
   authed.use(recurringTemplatesRouter(prisma, clock))
   authed.use(cardStatementsRouter(prisma, clock))
   authed.use(transactionsRouter(prisma))
-  authed.use(monthsRouter(prisma))
+  authed.use(monthsRouter(prisma, clock))
   authed.use(installmentPlansRouter(prisma, clock))
   authed.use(dashboardRouter(prisma, clock))
   authed.use(importsRouter(prisma, clock))

@@ -45,7 +45,7 @@ const refNames = {
 export const importTransactionDraftSchema = z.object({
   kind: z.literal('transaction'),
   type: z.enum(['income', 'expense']),
-  nature: z.enum(['fixed', 'variable', 'planned', 'extra']),
+  nature: z.enum(['fixed', 'variable', 'planned', 'extra', 'carryover']),
   status: z.enum(['forecast', 'settled']),
   description,
   amountCents: positiveCentsSchema,

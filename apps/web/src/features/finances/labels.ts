@@ -18,6 +18,7 @@ export const natureLabels: Record<TransactionNature, string> = {
   planned: 'Planejamento',
   installment: 'Parcela',
   extra: 'Extra',
+  carryover: 'Saldo anterior',
 }
 
 const MONTHS = [

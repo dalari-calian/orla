@@ -1,4 +1,4 @@
-import { CONTRIBUTION_SOURCES, CONTRIBUTION_TIMINGS } from '@orla/core'
+import { CARRYOVER_MODES, CONTRIBUTION_SOURCES, CONTRIBUTION_TIMINGS } from '@orla/core'
 import { z } from 'zod'
 import { nonNegativeCentsSchema } from './common.ts'
 
@@ -24,6 +24,8 @@ export const cardCompetenceSchema = z.enum(['due_month', 'closing_month'])
 /** Rentabilidade real (docs/07 §3): quando o aporte entra e de onde vem. */
 export const contributionTimingSchema = z.enum(CONTRIBUTION_TIMINGS)
 export const contributionSourceSchema = z.enum(CONTRIBUTION_SOURCES)
+/** Saldo do mês anterior (RF-54): perguntar (padrão), sempre automático ou nunca. */
+export const carryoverModeSchema = z.enum(CARRYOVER_MODES)
 
 /** GET /me/settings */
 export const settingsResponseSchema = z.object({
@@ -34,6 +36,7 @@ export const settingsResponseSchema = z.object({
   onboardingCompleted: z.boolean(),
   contributionTiming: contributionTimingSchema,
   returnContributionSource: contributionSourceSchema,
+  carryoverMode: carryoverModeSchema,
 })
 export type SettingsResponse = z.infer<typeof settingsResponseSchema>
 
@@ -47,6 +50,7 @@ export const updateSettingsRequestSchema = z
     onboardingCompleted: z.boolean(),
     contributionTiming: contributionTimingSchema,
     returnContributionSource: contributionSourceSchema,
+    carryoverMode: carryoverModeSchema,
   })
   .partial()
 export type UpdateSettingsRequest = z.infer<typeof updateSettingsRequestSchema>

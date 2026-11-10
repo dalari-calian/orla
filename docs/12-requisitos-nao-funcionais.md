@@ -27,8 +27,8 @@
 ## Confiabilidade e dados
 
 - **RNF-30** Operações compostas (gerar parcelas, efetivar aporte, commit de importação, fechar balanço) em **transação** de banco.
-- **RNF-31** Migrations versionadas com `prisma migrate`; `prisma migrate deploy` roda no deploy (step de build) e nunca são editadas depois de aplicadas.
-- **RNF-32** Backup semanal automático + backup JSON manual pelo usuário.
+- **RNF-31** Migrations versionadas com `prisma migrate`; `prisma migrate deploy` roda no workflow de deploy (depois do backup pre-deploy e antes de publicar — `16-deploy-e-backup.md`) e nunca são editadas depois de aplicadas.
+- **RNF-32** Backup automático (00h, 12h e antes de cada deploy — `16-deploy-e-backup.md`) + backup JSON manual pelo usuário.
 - **RNF-33** Falha de provedor externo (cotação/notícia) nunca quebra a tela.
 
 ## Qualidade

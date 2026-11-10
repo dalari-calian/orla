@@ -4,9 +4,71 @@ import {
   defaultStatusFor,
   isNatureAllowed,
   plannedProgress,
+  recurringIncomeForMonth,
   resolveSavingsGoal,
+  shareOfIncome,
   type SummaryTransaction,
 } from './month-summary.ts'
+import type { RecurrenceRule } from './recurrence.ts'
+
+function template(
+  partial: Partial<RecurrenceRule> & { type: 'income' | 'expense'; amountCents: number },
+) {
+  return {
+    frequency: 'monthly' as const,
+    monthOfYear: null,
+    dayOfMonth: 5,
+    startMonth: '2026-11',
+    endMonth: null,
+    isActive: true,
+    ...partial,
+  }
+}
+
+describe('Meta no onboarding — valor ↔ % da renda', () => {
+  it('soma só receitas recorrentes que ocorrem no mês', () => {
+    const templates = [
+      template({ type: 'income', amountCents: 600_000 }),
+      template({ type: 'income', amountCents: 50_000 }),
+      template({ type: 'expense', amountCents: 200_000 }),
+      template({ type: 'income', amountCents: 99_999, isActive: false }),
+      template({ type: 'income', amountCents: 99_999, startMonth: '2026-12' }),
+      template({ type: 'income', amountCents: 99_999, endMonth: '2026-10', startMonth: '2026-01' }),
+      template({ type: 'income', amountCents: 99_999, frequency: 'yearly', monthOfYear: 3 }),
+    ]
+    expect(recurringIncomeForMonth(templates, '2026-11')).toBe(650_000)
+  })
+
+  it('sem modelos de receita → renda zero', () => {
+    expect(recurringIncomeForMonth([], '2026-11')).toBe(0)
+    expect(
+      recurringIncomeForMonth([template({ type: 'expense', amountCents: 1000 })], '2026-11'),
+    ).toBe(0)
+  })
+
+  it('valor fixo vira fração da renda', () => {
+    expect(shareOfIncome(120_000, 600_000)).toBe(0.2)
+    expect(shareOfIncome(600_000, 600_000)).toBe(1)
+    expect(shareOfIncome(900_000, 600_000)).toBe(1.5)
+    expect(shareOfIncome(0, 600_000)).toBe(0)
+  })
+
+  it('arredonda a 0,01 ponto percentual (half-even)', () => {
+    expect(shareOfIncome(100_000, 300_000)).toBe(0.3333)
+    expect(shareOfIncome(1, 20_000)).toBe(0) // 0,00005 → empate, vai para o par (0)
+    expect(shareOfIncome(3, 20_000)).toBe(0.0002) // 0,00015 → par acima
+  })
+
+  it('sem renda → null (não há o que comparar)', () => {
+    expect(shareOfIncome(120_000, 0)).toBeNull()
+    expect(shareOfIncome(120_000, -100)).toBeNull()
+  })
+
+  it('valores que não são centavos inteiros são erro', () => {
+    expect(() => shareOfIncome(10.5, 600_000)).toThrow()
+    expect(() => shareOfIncome(100, 0.1)).toThrow()
+  })
+})
 
 let sequence = 0
 function tx(
@@ -27,7 +89,10 @@ const noGoal = { monthOverrideCents: null, defaultGoal: { mode: 'none' as const 
 describe('regras de natureza e status', () => {
   it('naturezas por tipo', () => {
     expect(isNatureAllowed('income', 'extra')).toBe(true)
-    expect(isNatureAllowed('income', 'installment')).toBe(false)
+    // Parcela de um parcelado a receber.
+    expect(isNatureAllowed('income', 'installment')).toBe(true)
+    expect(isNatureAllowed('income', 'variable')).toBe(false)
+    expect(isNatureAllowed('income', 'planned')).toBe(false)
     expect(isNatureAllowed('expense', 'planned')).toBe(true)
     expect(isNatureAllowed('expense', 'extra')).toBe(false)
   })
@@ -96,6 +161,7 @@ describe('RF-51 — resumo do mês', () => {
       savingsGoalCents: 1_200_00,
       goalInvestedCents: 0,
       goalRemainingCents: 1_200_00,
+      carryoverCents: 0,
       projectedSurplusCents: 3_270_00,
       currentBalanceCents: 4_420_00,
       freeToSpendCents: 3_270_00,

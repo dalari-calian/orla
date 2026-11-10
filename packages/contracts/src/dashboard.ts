@@ -102,6 +102,8 @@ export const projectionRowSchema = z.object({
   plannedCents: cents,
   variableCents: cents,
   goalCents: cents,
+  /** Saldo trazido do mês anterior, com sinal (RF-54). */
+  carryoverCents: z.number().int(),
   surplusCents: cents,
 })
 export type ProjectionRow = z.infer<typeof projectionRowSchema>
