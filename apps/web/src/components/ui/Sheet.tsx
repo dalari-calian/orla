@@ -110,7 +110,12 @@ export function Sheet({
           <X className="size-5" aria-hidden />
         </button>
       </div>
-      <div className="pb-safe min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+      {/*
+       * flex-initial (0 1 auto), não flex-1: o <dialog> tem altura pelo conteúdo, e no Safari
+       * uma base 0% faz o corpo medir zero — o sheet abria esmagado, só com o cabeçalho.
+       * Com base auto ele cresce com o formulário e encolhe (rolando) só ao bater no max-h.
+       */}
+      <div className="pb-safe min-h-0 flex-initial overflow-x-hidden overflow-y-auto overscroll-contain">
         <div className="px-5 pt-2 pb-6">{shownChildren}</div>
       </div>
     </dialog>
